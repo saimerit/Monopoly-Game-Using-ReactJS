@@ -91,6 +91,7 @@ interface CitySquare extends BaseSquare {
 interface UtilitySquare extends BaseSquare {
     type: 'airport' | 'harbour' | 'company';
     cost: number;
+    rent: number[];
 }
 
 interface TaxSquare extends BaseSquare {
@@ -143,38 +144,38 @@ const initialBoardState: Record<string, BoardSquare> = {
     2: { name: "Treasure Chest", type: "treasure" },
     3: { name: "Delhi", type: "city", country: "India", cost: 60, rent: [4, 20, 60, 180, 320, 450] },
     4: { name: "Income Tax", type: "tax", amount: 0.10 },
-    5: { name: "Airport 1", type: "airport", cost: 200 },
+    5: { name: "Airport 1", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
     6: { name: "Hyderabad", type: "city", country: "India", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
     7: { name: "Surprise", type: "surprise" },
     8: { name: "Beijing", type: "city", country: "China", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
     9: { name: "Shanghai", type: "city", country: "China", cost: 120, rent: [8, 40, 100, 300, 450, 600] },
-    10: { name: "Harbour 1", type: "harbour", cost: 150 },
+    10: { name: "Harbour 1", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
     11: { name: "Shenzhen", type: "city", country: "China", cost: 140, rent: [10, 50, 150, 450, 625, 750] },
-    12: { name: "Tech Corp", type: "company", cost: 150 },
+    12: { name: "Tech Corp", type: "company", cost: 150, rent: [] },
     13: { name: "Tokyo", type: "city", country: "Japan", cost: 140, rent: [10, 50, 150, 450, 625, 750] },
     14: { name: "Jail / Visiting", type: "jail" },
     15: { name: "Osaka", type: "city", country: "Japan", cost: 160, rent: [12, 60, 180, 500, 700, 900] },
-    16: { name: "Airport 2", type: "airport", cost: 200 },
+    16: { name: "Airport 2", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
     17: { name: "Berlin", type: "city", country: "Germany", cost: 180, rent: [14, 70, 200, 550, 750, 950] },
     18: { name: "Munich", type: "city", country: "Germany", cost: 180, rent: [14, 70, 200, 550, 750, 950] },
     19: { name: "Treasure Chest", type: "treasure" },
     20: { name: "Hamburg", type: "city", country: "Germany", cost: 200, rent: [16, 80, 220, 600, 800, 1000] },
-    21: { name: "Harbour 2", type: "harbour", cost: 150 },
+    21: { name: "Harbour 2", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
     22: { name: "Moscow", type: "city", country: "Russia", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
     23: { name: "Surprise", type: "surprise" },
     24: { name: "St. Petersburg", type: "city", country: "Russia", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
     25: { name: "Kazan", type: "city", country: "Russia", cost: 240, rent: [20, 100, 300, 750, 925, 1100] },
-    26: { name: "Energy Corp", type: "company", cost: 150 },
+    26: { name: "Energy Corp", type: "company", cost: 150, rent: [] },
     27: { name: "Paris", type: "city", country: "France", cost: 260, rent: [22, 110, 330, 800, 975, 1150] },
     28: { name: "Vacation", type: "vacation" },
     29: { name: "Marseille", type: "city", country: "France", cost: 260, rent: [22, 110, 330, 800, 975, 1150] },
     30: { name: "Lyon", type: "city", country: "France", cost: 280, rent: [24, 120, 360, 850, 1025, 1200] },
-    31: { name: "Airport 3", type: "airport", cost: 200 },
+    31: { name: "Airport 3", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
     32: { name: "London", type: "city", country: "UK", cost: 300, rent: [26, 130, 390, 900, 1100, 1275] },
     33: { name: "Manchester", type: "city", country: "UK", cost: 300, rent: [26, 130, 390, 900, 1100, 1275] },
     34: { name: "Treasure Chest", type: "treasure" },
     35: { name: "Liverpool", type: "city", country: "UK", cost: 320, rent: [28, 150, 450, 1000, 1200, 1400] },
-    36: { name: "Harbour 3", type: "harbour", cost: 150 },
+    36: { name: "Harbour 3", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
     37: { name: "Toronto", type: "city", country: "Canada", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Vancouver", type: "city", country: "Canada", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
@@ -183,12 +184,12 @@ const initialBoardState: Record<string, BoardSquare> = {
     42: { name: "Go to Jail", type: "go-to-jail-square" },
     43: { name: "Sao Paulo", type: "city", country: "Brazil", cost: 420, rent: [60, 220, 650, 1500, 1800, 2100] },
     44: { name: "Brasilia", type: "city", country: "Brazil", cost: 450, rent: [70, 250, 700, 1600, 1900, 2200] },
-    45: { name: "Airport 4", type: "airport", cost: 200 },
+    45: { name: "Airport 4", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
     46: { name: "Sydney", type: "city", country: "Australia", cost: 475, rent: [80, 280, 750, 1700, 2000, 2400] },
     47: { name: "Treasure Chest", type: "treasure" },
     48: { name: "Melbourne", type: "city", country: "Australia", cost: 475, rent: [80, 280, 750, 1700, 2000, 2400] },
     49: { name: "Canberra", type: "city", country: "Australia", cost: 500, rent: [90, 300, 800, 1800, 2100, 2500] },
-    50: { name: "Harbour 4", type: "harbour", cost: 150 },
+    50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
     51: { name: "Nice", type: "city", country: "France", cost: 525, rent: [100, 320, 850, 1900, 2200, 2600] },
     52: { name: "Glasgow", type: "city", country: "UK", cost: 525, rent: [100, 320, 850, 1900, 2200, 2600] },
     53: { name: "New York", type: "city", country: "USA", cost: 550, rent: [110, 350, 900, 2000, 2400, 2800] },
@@ -265,12 +266,12 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
         }
         case 'airport': {
             const airportsOwned = owner.airports.length;
-            rentAmount = 25 * (2 ** (airportsOwned - 1));
+            rentAmount = squareInfo.rent[airportsOwned - 1] || 0;
             break;
         }
         case 'harbour': {
             const harboursOwned = owner.harbours.length;
-            rentAmount = 100 * harboursOwned;
+            rentAmount = squareInfo.rent[harboursOwned - 1] || 0;
             break;
         }
         case 'company': {
@@ -280,12 +281,6 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
             break;
         }
         default: return;
-    }
-
-    if (renter.money < rentAmount) {
-        // Player doesn't have enough, but they can sell/mortgage.
-        // For simplicity, we'll just deduct and let them go into debt.
-        // A more complex implementation would pause here and await player action.
     }
     
     await updateDoc(doc(db, "games", roomId), {
@@ -360,7 +355,6 @@ const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: GameState
     await updateDoc(doc(db, "games", roomId), {
         [`players.${playerId}.position`]: 14,
         [`players.${playerId}.inJail`]: true,
-        [`players.${playerId}.jailTurns`]: 0,
         [`players.${playerId}.doublesCount`]: 0,
         gameLog: arrayUnion(`${gameState.players[playerId].name} was sent to Jail!`)
     });
@@ -828,7 +822,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
         if (!trade) return;
         
         const gameRef = doc(db, "games", roomId);
-        await runTransaction(db, async (transaction) => {
+        await runTransaction(db, async (transaction: Transaction) => {
             const gameDoc = await transaction.get(gameRef);
             if (!gameDoc.exists()) throw new Error("Game not found!");
             const gameData = gameDoc.data() as GameState;
@@ -1051,13 +1045,13 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
             wrapperStyle.transform = 'rotate(90deg)';
             wrapperStyle.width = '60px';
             wrapperStyle.height = '100px';
-            popupPositionClass = 'left-full ml-2';
+            popupPositionClass = 'left-full top-0 ml-2';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
             wrapperStyle.width = '60px';
             wrapperStyle.height = '100px';
-            popupPositionClass = 'right-full mr-2';
+            popupPositionClass = 'right-full top-0 mr-2';
         }
         if (isTopSide) {
             popupPositionClass = 'top-full mt-2';
@@ -1090,12 +1084,12 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         }
 
         return (
-            <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-[9px] text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+            <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
                     {hasColorBar && <div className="w-full h-5 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
                     <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
                     
-                    {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-xs font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
+                    {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-sm font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
                     
                     {ownerColor && <div className="w-full h-5 border-t border-gray-500" style={{ backgroundColor: ownerColor }}></div>}
                 </div>
@@ -1105,24 +1099,36 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
-                {cellInfo.type === 'city' && (
+                {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
                     <div className={`absolute z-10 bg-purple-900 bg-opacity-95 hidden group-hover:flex flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
                         <h4 className="font-bold mb-2 text-lg">{cellInfo.name}</h4>
                         {owner && <p className="text-xs mb-2">Owned by: {owner.name}</p>}
-                        <table className="w-full text-left text-base mb-2">
-                            <tbody>
-                                <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
-                                <tr><td>with 1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
-                                <tr><td>with 2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
-                                <tr><td>with 3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
-                                <tr><td>with 4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
-                                <tr><td>A Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
-                            </tbody>
-                        </table>
+                        {cellInfo.type === 'city' && (
+                            <table className="w-full text-left text-base mb-2">
+                                <tbody>
+                                    <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
+                                    <tr><td>with 1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
+                                    <tr><td>with 2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
+                                    <tr><td>with 3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
+                                    <tr><td>with 4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
+                                    <tr><td>A Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
+                                </tbody>
+                            </table>
+                        )}
+                         {(cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
+                             <table className="w-full text-left text-base mb-2">
+                                <tbody>
+                                    <tr><td>1 Owned</td><td>${(cellInfo as UtilitySquare).rent[0]}</td></tr>
+                                    <tr><td>2 Owned</td><td>${(cellInfo as UtilitySquare).rent[1]}</td></tr>
+                                    <tr><td>3 Owned</td><td>${(cellInfo as UtilitySquare).rent[2]}</td></tr>
+                                    <tr><td>4 Owned</td><td>${(cellInfo as UtilitySquare).rent[3]}</td></tr>
+                                </tbody>
+                            </table>
+                        )}
                         {isMyProperty && (
                             <>
-                                <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as CitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as CitySquare).cost / 2})`}</button>
-                                {!cellState.mortgaged && (
+                                <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as UtilitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as UtilitySquare).cost / 2})`}</button>
+                                {cellInfo.type === 'city' && !cellState.mortgaged && (
                                     <div className="flex w-full gap-1 mb-1">
                                         <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">Build</button>
                                         <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm">Sell</button>
@@ -1139,11 +1145,11 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
     return (
         <div className="flex justify-center items-center p-5">
-            <div className="grid grid-cols-[100px_repeat(13,_60px)_100px] grid-rows-[100px_repeat(13,_60px)_100px] gap-0.5 bg-black border-2 border-gray-500 relative">
+            <div className="grid grid-cols-[120px_repeat(13,_70px)_120px] grid-rows-[120px_repeat(13,_70px)_120px] gap-0.5 bg-black border-2 border-gray-500 relative">
                 {cells}
-                <div className="col-start-2 col-span-13 row-start-2 row-span-13 bg-[#2a3d2b] p-4 box-border">
-                    <div className="h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-50 rounded text-gray-100">
-                       {gameLog.slice().reverse().map((msg, i) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-base">{msg}</p>)}
+                <div className="col-start-2 col-span-13 row-start-2 row-span-13 bg-[#3a4d3b] p-4 box-border">
+                    <div className="h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-20 rounded text-gray-100">
+                       {gameLog.slice().reverse().map((msg, i) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-lg">{msg}</p>)}
                     </div>
                 </div>
             </div>
@@ -1228,7 +1234,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
 
         if (doublesCount === 3) {
             await goToJail(roomId, currentPlayerId, gameState);
-            await handleEndTurn();
+            setHasRolled(true); // End movement phase after going to jail
             return;
         }
 
