@@ -45,6 +45,7 @@ interface AuctionState {
     currentBid?: number;
     highestBidder?: PlayerId | null;
     bidCount?: number;
+    sellerId?: PlayerId | null; // For player-hosted auctions
 }
 
 interface Trade {
@@ -282,17 +283,19 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
     }
 
     if (renter.money < rentAmount) {
-        await handleBankruptcy(roomId, renterId, gameState);
-    } else {
-        await updateDoc(doc(db, "games", roomId), {
-            [`players.${renterId}.money`]: increment(-rentAmount),
-            [`players.${owner.id}.money`]: increment(rentAmount),
-            gameLog: arrayUnion(`${renter.name} paid $${rentAmount} to ${owner.name}.`)
-        });
+        // Player doesn't have enough, but they can sell/mortgage.
+        // For simplicity, we'll just deduct and let them go into debt.
+        // A more complex implementation would pause here and await player action.
     }
+    
+    await updateDoc(doc(db, "games", roomId), {
+        [`players.${renterId}.money`]: increment(-rentAmount),
+        [`players.${owner.id}.money`]: increment(rentAmount),
+        gameLog: arrayUnion(`${renter.name} paid $${rentAmount} to ${owner.name}.`)
+    });
 };
 
-const startAuction = async (roomId: RoomId, propertyId: PropertyId) => {
+const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: PlayerId | null = null) => {
     const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     await updateDoc(doc(db, "games", roomId), {
         auction: {
@@ -301,6 +304,7 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId) => {
             currentBid: Math.floor(property.cost / 2),
             highestBidder: null,
             bidCount: 0,
+            sellerId: sellerId,
         },
         gameLog: arrayUnion(`Auction started for ${property.name}!`)
     });
@@ -322,7 +326,7 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
         case 'airport':
         case 'harbour':
         case 'company':
-            if (gameState.board[newPosition].owner) {
+            if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
                 await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
             }
             break;
@@ -384,22 +388,18 @@ const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition:
 const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const propertyState = gameState.board[propertyId];
-    const player = gameState.players[playerId];
 
     if (propertyState.houses > 0) {
         alert("You must sell all houses before mortgaging.");
         return;
     }
-    if (propertyState.mortgaged) {
-        alert("This property is already mortgaged.");
-        return;
-    }
+    if (propertyState.mortgaged) return; // Already mortgaged
 
     const mortgageValue = propertyInfo.cost / 2;
     await updateDoc(doc(db, "games", roomId), {
         [`players.${playerId}.money`]: increment(mortgageValue),
         [`board.${propertyId}.mortgaged`]: true,
-        gameLog: arrayUnion(`${player.name} mortgaged ${propertyInfo.name} for $${mortgageValue}.`)
+        gameLog: arrayUnion(`${gameState.players[playerId].name} mortgaged ${propertyInfo.name} for $${mortgageValue}.`)
     });
 };
 
@@ -435,14 +435,6 @@ const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId
         alert(`You need $${countryInfo.houseCost} to build a house.`);
         return;
     }
-
-    const housesInCountry = countryInfo.cities.map(cId => gameState.board[cId].houses);
-    const minHouses = Math.min(...housesInCountry);
-    if (cityState.houses > minHouses) {
-        alert(`You must build evenly. Build on another city in ${cityInfo.country} first.`);
-        return;
-    }
-
     if (cityState.houses >= 5) {
         alert("You cannot build any more on this property.");
         return;
@@ -455,6 +447,27 @@ const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId
         gameLog: arrayUnion(`${player.name} built ${houseOrHotel} in ${cityInfo.name}.`)
     });
 };
+
+const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId, gameState: GameState) => {
+    const cityInfo = initialBoardState[cityId] as CitySquare;
+    const countryInfo = countryData[cityInfo.country];
+    const cityState = gameState.board[cityId];
+
+    if (cityState.houses <= 0) {
+        alert("There are no houses to sell on this property.");
+        return;
+    }
+
+    const salePrice = countryInfo.houseCost / 2;
+    const houseOrHotel = cityState.houses === 5 ? "a hotel" : "a house";
+
+    await updateDoc(doc(db, "games", roomId), {
+        [`players.${playerId}.money`]: increment(salePrice),
+        [`board.${cityId}.houses`]: increment(-1),
+        gameLog: arrayUnion(`${gameState.players[playerId].name} sold ${houseOrHotel} in ${cityInfo.name} for $${salePrice}.`)
+    });
+};
+
 
 const handleDeleteGame = async (roomId: RoomId) => {
     if (window.confirm("Are you sure you want to delete this game? This action cannot be undone.")) {
@@ -690,16 +703,28 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
 
     const endAuction = useCallback(async () => {
         if (!property) return;
-        const { highestBidder, currentBid, propertyId } = auction;
+        const { highestBidder, currentBid, propertyId, sellerId } = auction;
         const updates: DocumentData = { "auction.active": false };
+        
         if (highestBidder && currentBid && propertyId) {
             const winner = gameState.players[highestBidder];
             const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
             const ownershipArray = propertyTypeMap[property.type];
+            
             updates[`players.${highestBidder}.money`] = increment(-currentBid);
             updates[`players.${highestBidder}.${ownershipArray}`] = arrayUnion(String(propertyId));
             updates[`board.${propertyId}.owner`] = highestBidder;
-            updates.gameLog = arrayUnion(`${winner.name} won the auction for ${property.name} with a bid of $${currentBid}!`);
+
+            if (sellerId) {
+                const sellerGets = Math.floor(currentBid * 0.9);
+                const tax = currentBid - sellerGets;
+                updates[`players.${sellerId}.money`] = increment(sellerGets);
+                updates.vacationPot = increment(tax);
+                updates.gameLog = arrayUnion(`${winner.name} won the auction for ${property.name} from ${gameState.players[sellerId].name} with a bid of $${currentBid}!`);
+            } else {
+                updates.gameLog = arrayUnion(`${winner.name} won the auction for ${property.name} with a bid of $${currentBid}!`);
+            }
+
         } else {
             updates.gameLog = arrayUnion(`Auction for ${property.name} ended with no bids.`);
         }
@@ -732,7 +757,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
     const placeBid = async (amount: number) => {
         if (!auction.currentBid) return;
         const newBid = auction.currentBid + amount;
-        if (me.money < newBid) return alert("You cannot afford this bid.");
+        if (me.money < newBid) return; // Button should be disabled, but as a safeguard
         await updateDoc(doc(db, "games", roomId), {
             "auction.currentBid": newBid,
             "auction.highestBidder": currentPlayerId,
@@ -745,13 +770,14 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 text-center shadow-xl w-96">
                 <h2 className="text-2xl font-bold mb-2">Auction for {property.name}</h2>
+                {auction.sellerId && <p className="text-sm text-gray-400 mb-2">Auctioned by {gameState.players[auction.sellerId]?.name}</p>}
                 <h3 className="text-xl mb-2">Current Bid: ${auction.currentBid}</h3>
                 <p className="mb-4">Highest Bidder: {gameState.players[auction.highestBidder || '']?.name || 'None'}</p>
                 <h3 className="text-3xl font-mono mb-4">Selling in: {timer}</h3>
                 <div className="flex justify-center gap-4">
-                    <button onClick={() => placeBid(10)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">+$10</button>
-                    <button onClick={() => placeBid(50)} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">+$50</button>
-                    <button onClick={() => placeBid(100)} className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">+$100</button>
+                    <button onClick={() => placeBid(10)} disabled={me.money < (auction.currentBid || 0) + 10} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">+$10</button>
+                    <button onClick={() => placeBid(50)} disabled={me.money < (auction.currentBid || 0) + 50} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">+$50</button>
+                    <button onClick={() => placeBid(100)} disabled={me.money < (auction.currentBid || 0) + 100} className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">+$100</button>
                 </div>
             </div>
         </div>
@@ -978,12 +1004,14 @@ const TradesWidget: FC<TradesWidgetProps> = ({ gameState, currentPlayerId, onVie
 };
 
 interface BoardProps {
-    players: Record<PlayerId, Player>;
-    boardState: BoardState;
-    gameLog: string[];
+    gameState: GameState;
+    currentPlayerId: PlayerId;
+    roomId: RoomId;
 }
 
-const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
+const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
+    const { players, board: boardState, gameLog } = gameState;
+
     const getGridPosition = (i: number): { gridArea: string } => {
         let row, col;
         if (i >= 0 && i <= 14) { row = 15; col = 15 - i; } 
@@ -994,12 +1022,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
     };
 
     const cells = Array.from({ length: 56 }, (_, i) => {
-        const cellInfo = initialBoardState[i];
+        const cellInfo = initialBoardState[i] as CitySquare | UtilitySquare | TaxSquare | BaseSquare;
         const cellState = boardState[i];
         const isCorner = [0, 14, 28, 42].includes(i);
         const hasColorBar = cellInfo.type === 'city';
         const flagSvg = hasColorBar ? countryFlags[(cellInfo as CitySquare).country] : null;
         const ownerColor = cellState?.owner ? players[cellState.owner]?.color : null;
+        const isMyProperty = cellState?.owner === currentPlayerId;
         
         const isLeftSide = i >= 15 && i <= 27;
         const isRightSide = i >= 43 && i <= 55;
@@ -1016,13 +1045,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
 
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
 
         if (cellInfo.type === 'jail') {
@@ -1049,7 +1078,7 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
         }
 
         return (
-            <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-[9px] text-center box-border ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+            <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-[9px] text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
                     {hasColorBar && <div className="w-full h-5 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
                     <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
@@ -1064,6 +1093,31 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
                         p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
+                {isMyProperty && (
+                    <div className="absolute z-10 inset-0 bg-black bg-opacity-80 hidden group-hover:flex flex-col items-center justify-center p-2 text-white text-xs">
+                        <h4 className="font-bold mb-1">{cellInfo.name}</h4>
+                        {cellInfo.type === 'city' && (
+                            <table className="w-full text-left text-[10px] mb-2">
+                                <tbody>
+                                    <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
+                                    <tr><td>1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
+                                    <tr><td>2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
+                                    <tr><td>3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
+                                    <tr><td>4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
+                                    <tr><td>Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
+                                </tbody>
+                            </table>
+                        )}
+                        <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as CitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as CitySquare).cost / 2})`}</button>
+                        {cellInfo.type === 'city' && !cellState.mortgaged && (
+                            <div className="flex w-full gap-1 mb-1">
+                                <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded">Build</button>
+                                <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded">Sell</button>
+                            </div>
+                        )}
+                        <button onClick={() => startAuction(roomId, String(i), currentPlayerId)} className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded">Auction</button>
+                    </div>
+                )}
             </div>
         );
     });
@@ -1190,6 +1244,12 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         if (!gameState) return;
         const { turnOrder, currentPlayerTurn } = gameState;
         const player = gameState.players[currentPlayerTurn];
+        
+        if (player.money < 0) {
+            alert("You must resolve your debt by selling houses or mortgaging properties before ending your turn.");
+            return;
+        }
+
         const currentIndex = turnOrder.indexOf(currentPlayerTurn);
         const nextPlayerId = turnOrder[(currentIndex + 1) % turnOrder.length];
         
@@ -1241,12 +1301,11 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const currentSquareState = gameState.board[me.position];
     const canBuy = ['city', 'airport', 'harbour', 'company'].includes(currentSquareInfo?.type) && !currentSquareState?.owner;
     const amIOnTurn = gameState.currentPlayerTurn === currentPlayerId;
-    const myProperties = [...me.cities, ...me.airports, ...me.harbours, ...me.companies];
 
     return (
         <div className="max-w-[1500px] mx-auto">
             <div className="flex flex-col lg:flex-row gap-5 items-start">
-                <Board players={gameState.players} boardState={gameState.board} gameLog={gameState.gameLog} />
+                <Board gameState={gameState} currentPlayerId={currentPlayerId} roomId={roomId} />
                 <div className="flex-shrink-0 w-full lg:w-96 bg-gray-800 p-4 rounded-lg border border-gray-600 shadow-lg">
                     <h1 className="text-2xl font-bold mb-2">Room: {roomId}</h1>
                     <div className="bg-gray-700 p-2.5 rounded mb-4">
@@ -1287,7 +1346,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                             <>
                                 {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
                                 {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
-                                <button onClick={handleEndTurn} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">End Turn</button>
+                                <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
                             </>
                         )}
                       </div>
@@ -1299,42 +1358,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
 
                     <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />
                     
-                    <div className="mt-4">
-                        <h2 className="text-xl font-semibold mb-2">Your Properties</h2>
-                        <div className="space-y-1.5 max-h-60 overflow-y-auto pr-2">
-                            {myProperties.length > 0 ? myProperties.map(propId => {
-                                const propInfo = initialBoardState[propId] as CitySquare | UtilitySquare;
-                                const propState = gameState.board[propId];
-                                const countryInfo = propInfo.type === 'city' ? countryData[propInfo.country] : null;
-                                const hasMonopoly = countryInfo && countryInfo.cities.every(cId => me.cities.includes(String(cId)));
-                                
-                                return (
-                                    <div key={propId} className={`p-2 rounded-md border ${propState.mortgaged ? 'bg-red-900 bg-opacity-50 border-red-700' : 'bg-gray-700 border-gray-600'}`}>
-                                        <strong>{propInfo.name}</strong>
-                                        {propInfo.type === 'city' && <p className="text-xs">Houses: {propState.houses < 5 ? '🏠'.repeat(propState.houses) : '🏨'}</p>}
-                                        
-                                        <div className="flex gap-1 mt-1">
-                                            {propState.mortgaged ? (
-                                                <button onClick={() => unmortgageProperty(roomId, currentPlayerId, propId, gameState)} className="text-xs flex-1 bg-green-600 hover:bg-green-700 py-1 px-2 rounded">
-                                                    Unmortgage (${Math.ceil((propInfo.cost / 2) * 1.1)})
-                                                </button>
-                                            ) : (
-                                                <button onClick={() => mortgageProperty(roomId, currentPlayerId, propId, gameState)} className="text-xs flex-1 bg-yellow-600 hover:bg-yellow-700 py-1 px-2 rounded">
-                                                    Mortgage (${propInfo.cost / 2})
-                                                </button>
-                                            )}
-
-                                            {hasMonopoly && !propState.mortgaged && propInfo.type === 'city' && (
-                                                <button onClick={() => buildHouse(roomId, currentPlayerId, propId, gameState)} className="text-xs flex-1 bg-blue-500 hover:bg-blue-600 py-1 px-2 rounded">
-                                                    Build (${countryInfo.houseCost})
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            }) : <p className="text-gray-400">You do not own any properties.</p>}
-                        </div>
-                    </div>
                 </div>
             </div>
             {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} />}
