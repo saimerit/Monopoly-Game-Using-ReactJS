@@ -883,13 +883,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
 
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
 
         if (cellInfo.type === 'jail') {
@@ -939,7 +939,7 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
         <div className="flex justify-center items-center p-5">
             <div className="grid grid-cols-[100px_repeat(13,_60px)_100px] grid-rows-[100px_repeat(13,_60px)_100px] gap-0.5 bg-black border-2 border-gray-500 relative">
                 {cells}
-                <div className="col-start-2 col-span-13 row-start-2 row-span-13 bg-gray-800 p-4 box-border">
+                <div className="col-start-2 col-span-13 row-start-2 row-span-13 bg-[#2a3d2b] p-4 box-border">
                     <div className="h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-50 rounded text-gray-100">
                        {gameLog.slice().reverse().map((msg, i) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-base">{msg}</p>)}
                     </div>
@@ -958,6 +958,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [showTradeModal, setShowTradeModal] = useState(false);
     const [lastProcessedLog, setLastProcessedLog] = useState("");
+    const [hasRolled, setHasRolled] = useState(false);
 
     useEffect(() => {
         const gameRef = doc(db, "games", roomId);
@@ -976,7 +977,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         if (!gameState || gameState.status !== 'in-progress' || !gameState.gameLog.length) return;
 
         const lastLog = gameState.gameLog[gameState.gameLog.length - 1];
-        if (lastLog && lastLog !== lastProcessedLog && lastLog.includes(" rolled a ")) {
+        if (lastLog && lastLog !== lastProcessedLog && lastLog.includes(" landed on ")) {
             setLastProcessedLog(lastLog);
             
             const actingPlayerId = gameState.currentPlayerTurn;
@@ -987,6 +988,10 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             handleLandingOnSquare(roomId, actingPlayerId, actingPlayer.position, diceRoll, gameState);
         }
     }, [gameState, roomId, lastProcessedLog]);
+    
+    useEffect(() => {
+        setHasRolled(false);
+    }, [gameState?.currentPlayerTurn]);
 
     const handleStartGame = async () => {
         if (!gameState || gameState.hostId !== currentPlayerId) return alert("Only the admin can start the game.");
@@ -1030,16 +1035,23 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         const updates: DocumentData = {
             [`players.${currentPlayerId}.position`]: newPosition,
             [`players.${currentPlayerId}.doublesCount`]: doublesCount,
-            gameLog: arrayUnion(`${player.name} rolled a ${diceRoll}${isDoubles ? ' (doubles!)' : ''}.`)
         };
+        
+        const logMessages = [`${player.name} rolled a ${diceRoll}${isDoubles ? ' (doubles!)' : ''}.`];
 
         if (newPosition < player.position && !player.inJail) {
             const amount = 200;
             updates[`players.${currentPlayerId}.money`] = increment(amount);
-            updates.gameLog = arrayUnion(`${player.name} passed GO and collected $${amount}.`);
+            logMessages.push(`${player.name} passed GO and collected $${amount}.`);
         }
+        
+        updates.gameLog = arrayUnion(...logMessages);
 
         await updateDoc(doc(db, "games", roomId), updates);
+
+        if (!isDoubles) {
+            setHasRolled(true);
+        }
     };
 
     const handleEndTurn = async () => {
@@ -1090,7 +1102,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const currentSquareState = gameState.board[me.position];
     const canBuy = ['city', 'airport', 'harbour', 'company'].includes(currentSquareInfo?.type) && !currentSquareState?.owner;
     const amIOnTurn = gameState.currentPlayerTurn === currentPlayerId;
-    const canEndTurn = amIOnTurn && (me.doublesCount === 0 || me.onVacation);
     const myProperties = [...me.cities, ...me.airports, ...me.harbours, ...me.companies];
 
     return (
@@ -1128,11 +1139,18 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     <h2 className="text-xl font-semibold mb-2">Your Turn</h2>
                     {amIOnTurn && gameState.status === 'in-progress' && (
                       <div className="grid grid-cols-2 gap-2 mb-4">
-                        <button onClick={handleRollDice} disabled={me.onVacation} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">Roll Dice</button>
-                        {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
-                        {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
-                        {canEndTurn && <button onClick={handleEndTurn} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">End Turn</button>}
-                        {me.doublesCount > 0 && <p className="text-green-400 col-span-2">You rolled doubles! Roll again.</p>}
+                        {!hasRolled && !me.onVacation && (
+                            <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll Dice</button>
+                        )}
+                         {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
+
+                        {(hasRolled || me.onVacation) && (
+                            <>
+                                {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
+                                {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
+                                <button onClick={handleEndTurn} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">End Turn</button>
+                            </>
+                        )}
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 mb-4">
