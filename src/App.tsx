@@ -102,7 +102,9 @@ type BoardSquare = BaseSquare | CitySquare | UtilitySquare | TaxSquare;
 // ==========================================================
 // CONSTANTS & HELPERS
 // ==========================================================
+const generateRoomId = (): string => Math.random().toString(36).substring(2, 8).toUpperCase();
 const generateId = (): string => Math.random().toString(36).substring(2, 10);
+
 
 const playerColors: string[] = ['#d9534f', '#5cb85c', '#0275d8', '#f0ad4e', '#5bc0de', '#9b59b6', '#34495e', '#e74c3c'];
 
@@ -570,7 +572,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
         let docSnap;
 
         do {
-            newRoomId = generateId();
+            newRoomId = generateRoomId();
             gameRef = doc(db, "games", newRoomId);
             docSnap = await getDoc(gameRef);
         } while (docSnap.exists());
@@ -654,7 +656,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                     <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-lg">
                         <h2 className="text-2xl font-semibold mb-4">Join an Existing Game</h2>
                         <input type="text" placeholder="Enter Your Name" value={playerName} onChange={(e) => setPlayerName(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white" />
-                        <input type="text" placeholder="Enter 6-Digit Room ID" value={joinRoomId} onChange={(e) => setJoinRoomId(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white" />
+                        <input type="text" placeholder="Enter 6-Character Room ID" value={joinRoomId} onChange={(e) => setJoinRoomId(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white" />
                         <button onClick={handleJoinGame} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-200">Join Game</button>
                     </div>
                 </div>
@@ -1014,13 +1016,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
 
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '100px';
-            wrapperStyle.height = '60px';
+            wrapperStyle.width = '60px';
+            wrapperStyle.height = '100px';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '100px';
-            wrapperStyle.height = '60px';
+            wrapperStyle.width = '60px';
+            wrapperStyle.height = '100px';
         }
 
         if (cellInfo.type === 'jail') {
