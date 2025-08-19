@@ -883,13 +883,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
 
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '100px';
-            wrapperStyle.height = '60px';
+            wrapperStyle.width = '60px';
+            wrapperStyle.height = '100px';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '100px';
-            wrapperStyle.height = '60px';
+            wrapperStyle.width = '60px';
+            wrapperStyle.height = '100px';
         }
 
         if (cellInfo.type === 'jail') {
