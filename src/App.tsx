@@ -799,7 +799,6 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
     const handleAcceptTrade = async () => {
         if (!trade) return;
         
-        // This logic should be in a transaction to ensure atomicity
         const gameRef = doc(db, "games", roomId);
         await runTransaction(db, async (transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -809,11 +808,9 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
             const fromPlayer = gameData.players[trade.fromPlayer];
             const toPlayer = gameData.players[trade.toPlayer];
 
-            // Exchange money
             fromPlayer.money = fromPlayer.money - trade.offer.money + trade.request.money;
             toPlayer.money = toPlayer.money + trade.offer.money - trade.request.money;
             
-            // Exchange properties
             trade.offer.properties.forEach(propId => {
                 fromPlayer.cities = fromPlayer.cities.filter(p => p !== propId);
                 toPlayer.cities.push(propId);
@@ -1017,13 +1014,13 @@ const Board: FC<BoardProps> = ({ players, boardState, gameLog }) => {
 
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '100px';
+            wrapperStyle.height = '60px';
         }
 
         if (cellInfo.type === 'jail') {
@@ -1100,8 +1097,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             if (docSnap.exists()) {
                 setGameState(docSnap.data() as GameState);
             } else {
-                alert("Game room not found!");
-                window.location.href = '/';
+                // This is handled by the loading/error state below
             }
         });
         return () => unsubscribe();
@@ -1208,7 +1204,14 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         await updateDoc(doc(db, "games", roomId), updates);
     };
     
-    if (!gameState) return <div className="text-center text-xl">Loading Game...</div>;
+    if (!gameState) {
+        return (
+            <div className="text-center text-xl">
+                <p>Joining game...</p>
+                <p className="text-sm text-gray-400 mt-2">(If this takes more than a few seconds, the game ID might be invalid.)</p>
+            </div>
+        );
+    }
 
     if (gameState.status === 'finished') {
         const winnerName = gameState.winner ? (gameState.players[gameState.winner]?.name || "N/A") : "N/A";
