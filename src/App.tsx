@@ -1027,11 +1027,14 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         const isCorner = [0, 14, 28, 42].includes(i);
         const hasColorBar = cellInfo.type === 'city';
         const flagSvg = hasColorBar ? countryFlags[(cellInfo as CitySquare).country] : null;
-        const ownerColor = cellState?.owner ? players[cellState.owner]?.color : null;
+        const owner = cellState?.owner ? players[cellState.owner] : null;
+        const ownerColor = owner?.color;
         const isMyProperty = cellState?.owner === currentPlayerId;
         
         const isLeftSide = i >= 15 && i <= 27;
         const isRightSide = i >= 43 && i <= 55;
+        const isTopSide = i >= 29 && i <= 41;
+        const isBottomSide = i >= 1 && i <= 13;
         
         const wrapperStyle: React.CSSProperties = {
             display: 'flex',
@@ -1043,15 +1046,24 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
             position: 'relative',
         };
 
+        let popupPositionClass = '';
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
             wrapperStyle.width = '60px';
             wrapperStyle.height = '100px';
+            popupPositionClass = 'left-full ml-2';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
             wrapperStyle.width = '60px';
             wrapperStyle.height = '100px';
+            popupPositionClass = 'right-full mr-2';
+        }
+        if (isTopSide) {
+            popupPositionClass = 'top-full mt-2';
+        }
+        if (isBottomSide) {
+            popupPositionClass = 'bottom-full mb-2';
         }
 
         if (cellInfo.type === 'jail') {
@@ -1093,29 +1105,32 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
-                {isMyProperty && (
-                    <div className="absolute z-10 inset-0 bg-black bg-opacity-80 hidden group-hover:flex flex-col items-center justify-center p-2 text-white text-xs">
-                        <h4 className="font-bold mb-1">{cellInfo.name}</h4>
-                        {cellInfo.type === 'city' && (
-                            <table className="w-full text-left text-[10px] mb-2">
-                                <tbody>
-                                    <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
-                                    <tr><td>1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
-                                    <tr><td>2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
-                                    <tr><td>3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
-                                    <tr><td>4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
-                                    <tr><td>Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
-                                </tbody>
-                            </table>
+                {cellInfo.type === 'city' && (
+                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 hidden group-hover:flex flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
+                        <h4 className="font-bold mb-2 text-lg">{cellInfo.name}</h4>
+                        {owner && <p className="text-xs mb-2">Owned by: {owner.name}</p>}
+                        <table className="w-full text-left text-base mb-2">
+                            <tbody>
+                                <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
+                                <tr><td>with 1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
+                                <tr><td>with 2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
+                                <tr><td>with 3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
+                                <tr><td>with 4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
+                                <tr><td>A Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
+                            </tbody>
+                        </table>
+                        {isMyProperty && (
+                            <>
+                                <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as CitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as CitySquare).cost / 2})`}</button>
+                                {!cellState.mortgaged && (
+                                    <div className="flex w-full gap-1 mb-1">
+                                        <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">Build</button>
+                                        <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm">Sell</button>
+                                    </div>
+                                )}
+                                <button onClick={() => startAuction(roomId, String(i), currentPlayerId)} className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm">Auction</button>
+                            </>
                         )}
-                        <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as CitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as CitySquare).cost / 2})`}</button>
-                        {cellInfo.type === 'city' && !cellState.mortgaged && (
-                            <div className="flex w-full gap-1 mb-1">
-                                <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded">Build</button>
-                                <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded">Sell</button>
-                            </div>
-                        )}
-                        <button onClick={() => startAuction(roomId, String(i), currentPlayerId)} className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded">Auction</button>
                     </div>
                 )}
             </div>
@@ -1163,7 +1178,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         if (!gameState || gameState.status !== 'in-progress' || !gameState.gameLog.length) return;
 
         const lastLog = gameState.gameLog[gameState.gameLog.length - 1];
-        if (lastLog && lastLog !== lastProcessedLog && lastLog.includes(" landed on ")) {
+        if (lastLog && lastLog !== lastProcessedLog && lastLog.includes(" rolled a ")) {
             setLastProcessedLog(lastLog);
             
             const actingPlayerId = gameState.currentPlayerTurn;
