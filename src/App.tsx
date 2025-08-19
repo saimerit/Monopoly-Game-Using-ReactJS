@@ -47,12 +47,13 @@ interface AuctionState {
     bidCount?: number;
 }
 
-interface TradeState {
-    active: boolean;
-    fromPlayer?: PlayerId;
-    toPlayer?: PlayerId;
-    offer?: { money: number; properties: PropertyId[] };
-    request?: { money: number; properties: PropertyId[] };
+interface Trade {
+    id: string;
+    fromPlayer: PlayerId;
+    toPlayer: PlayerId;
+    offer: { money: number; properties: PropertyId[] };
+    request: { money: number; properties: PropertyId[] };
+    status: 'pending' | 'accepted' | 'rejected';
 }
 
 interface GameState {
@@ -70,7 +71,7 @@ interface GameState {
     gameLog: string[];
     vacationPot: number;
     auction: AuctionState;
-    trade: TradeState;
+    trades: Record<string, Trade>;
     winner?: PlayerId;
 }
 
@@ -101,7 +102,7 @@ type BoardSquare = BaseSquare | CitySquare | UtilitySquare | TaxSquare;
 // ==========================================================
 // CONSTANTS & HELPERS
 // ==========================================================
-const generateRoomId = (): string => Math.random().toString(36).substring(2, 8).toUpperCase();
+const generateId = (): string => Math.random().toString(36).substring(2, 10);
 
 const playerColors: string[] = ['#d9534f', '#5cb85c', '#0275d8', '#f0ad4e', '#5bc0de', '#9b59b6', '#34495e', '#e74c3c'];
 
@@ -569,7 +570,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
         let docSnap;
 
         do {
-            newRoomId = generateRoomId();
+            newRoomId = generateId();
             gameRef = doc(db, "games", newRoomId);
             docSnap = await getDoc(gameRef);
         } while (docSnap.exists());
@@ -588,7 +589,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             gameLog: [`Game created by ${playerName}.`],
             vacationPot: 0,
             auction: { active: false },
-            trade: { active: false }
+            trades: {}
         };
         try {
             await setDoc(gameRef, newGame);
@@ -756,10 +757,14 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
 };
 
 interface TradeModalProps extends ModalProps {
-    setShowTradeModal: (show: boolean) => void;
+    tradeId?: string;
+    setShowTradeModal: (show: string | null) => void;
 }
 
-function TradeModal({ gameState, roomId, currentPlayerId, setShowTradeModal }: TradeModalProps) {
+function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeModal }: TradeModalProps) {
+    const isViewing = !!tradeId;
+    const trade = isViewing ? gameState.trades[tradeId] : null;
+
     const [tradePartnerId, setTradePartnerId] = useState<PlayerId>("");
     const [offer, setOffer] = useState({ money: 0, properties: [] as PropertyId[] });
     const [request, setRequest] = useState({ money: 0, properties: [] as PropertyId[] });
@@ -774,75 +779,204 @@ function TradeModal({ gameState, roomId, currentPlayerId, setShowTradeModal }: T
 
     const handleSendOffer = async () => {
         if (!tradePartnerId) return alert("Please select a player to trade with.");
+        const newTradeId = generateId();
+        const newTrade: Trade = {
+            id: newTradeId,
+            fromPlayer: currentPlayerId,
+            toPlayer: tradePartnerId,
+            offer,
+            request,
+            status: 'pending'
+        };
+
         await updateDoc(doc(db, "games", roomId), {
-            trade: {
-                active: true,
-                fromPlayer: currentPlayerId,
-                toPlayer: tradePartnerId,
-                offer,
-                request
-            },
-            gameLog: arrayUnion(`${me.name} sent a trade offer to ${tradePartner.name}.`)
+            [`trades.${newTradeId}`]: newTrade,
+            gameLog: arrayUnion(`${me.name} sent a trade offer to ${tradePartner?.name}.`)
         });
-        setShowTradeModal(false);
+        setShowTradeModal(null);
+    };
+
+    const handleAcceptTrade = async () => {
+        if (!trade) return;
+        
+        // This logic should be in a transaction to ensure atomicity
+        const gameRef = doc(db, "games", roomId);
+        await runTransaction(db, async (transaction) => {
+            const gameDoc = await transaction.get(gameRef);
+            if (!gameDoc.exists()) throw new Error("Game not found!");
+            const gameData = gameDoc.data() as GameState;
+
+            const fromPlayer = gameData.players[trade.fromPlayer];
+            const toPlayer = gameData.players[trade.toPlayer];
+
+            // Exchange money
+            fromPlayer.money = fromPlayer.money - trade.offer.money + trade.request.money;
+            toPlayer.money = toPlayer.money + trade.offer.money - trade.request.money;
+            
+            // Exchange properties
+            trade.offer.properties.forEach(propId => {
+                fromPlayer.cities = fromPlayer.cities.filter(p => p !== propId);
+                toPlayer.cities.push(propId);
+                gameData.board[propId].owner = toPlayer.id;
+            });
+            trade.request.properties.forEach(propId => {
+                toPlayer.cities = toPlayer.cities.filter(p => p !== propId);
+                fromPlayer.cities.push(propId);
+                gameData.board[propId].owner = fromPlayer.id;
+            });
+
+            transaction.update(gameRef, {
+                players: gameData.players,
+                board: gameData.board,
+                [`trades.${trade.id}`]: deleteField(),
+                gameLog: arrayUnion(`${toPlayer.name} accepted the trade from ${fromPlayer.name}.`)
+            });
+        });
+
+        setShowTradeModal(null);
+    };
+
+    const handleRejectTrade = async () => {
+        if (!trade) return;
+        await updateDoc(doc(db, "games", roomId), {
+            [`trades.${trade.id}`]: deleteField(),
+            gameLog: arrayUnion(`${me.name} rejected the trade.`)
+        });
+        setShowTradeModal(null);
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
-            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-xl w-full max-w-3xl">
-                <h2 className="text-2xl font-bold mb-4 text-center">Propose a Trade</h2>
-                <select onChange={(e) => setTradePartnerId(e.target.value)} value={tradePartnerId} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white">
-                    <option value="">Select a player...</option>
-                    {Object.values(gameState.players).filter(p => p.id !== currentPlayerId).map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                </select>
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-xl w-full max-w-3xl relative">
+                <button onClick={() => setShowTradeModal(null)} className="absolute top-2 right-2 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
 
-                {tradePartner && (
-                    <div className="flex gap-6">
-                        {/* Your Offer Column */}
-                        <div className="flex-1 border border-gray-600 p-4 rounded-lg">
-                            <h3 className="text-xl font-semibold mb-2 text-center">Your Offer</h3>
-                            <label className="block mb-2">Money: ${offer.money}</label>
-                            <input type="range" min="0" max={me.money} value={offer.money} onChange={(e) => setOffer({...offer, money: Number(e.target.value)})} className="w-full" />
-                            <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
-                                {getPlayerProperties(me).map(propId => (
-                                    <label key={propId} className="flex items-center space-x-2">
-                                        <input type="checkbox" className="form-checkbox" onChange={(e) => {
-                                            const newProps = e.target.checked ? [...offer.properties, propId] : offer.properties.filter(p => p !== propId);
-                                            setOffer({...offer, properties: newProps});
-                                        }}/> <span>{initialBoardState[propId].name}</span>
-                                    </label>
-                                ))}
+                {isViewing && trade ? (
+                     <div>
+                        <h2 className="text-2xl font-bold mb-4 text-center">Trade Offer from {gameState.players[trade.fromPlayer].name}</h2>
+                        <div className="flex gap-6">
+                            <div className="flex-1 border border-gray-600 p-4 rounded-lg">
+                                <h3 className="text-xl font-semibold mb-2 text-center">They Offer</h3>
+                                <p>Money: ${trade.offer.money}</p>
+                                <ul className="list-disc list-inside mt-2">
+                                    {trade.offer.properties.map(p => <li key={p}>{initialBoardState[p].name}</li>)}
+                                </ul>
+                            </div>
+                            <div className="flex-1 border border-gray-600 p-4 rounded-lg">
+                                <h3 className="text-xl font-semibold mb-2 text-center">They Request</h3>
+                                <p>Money: ${trade.request.money}</p>
+                                <ul className="list-disc list-inside mt-2">
+                                    {trade.request.properties.map(p => <li key={p}>{initialBoardState[p].name}</li>)}
+                                </ul>
                             </div>
                         </div>
-                        {/* Their Request Column */}
-                        <div className="flex-1 border border-gray-600 p-4 rounded-lg">
-                            <h3 className="text-xl font-semibold mb-2 text-center">Their Request</h3>
-                            <label className="block mb-2">Money: ${request.money}</label>
-                            <input type="range" min="0" max={tradePartner.money} value={request.money} onChange={(e) => setRequest({...request, money: Number(e.target.value)})} className="w-full" />
-                             <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
-                                {getPlayerProperties(tradePartner).map(propId => (
-                                    <label key={propId} className="flex items-center space-x-2">
-                                        <input type="checkbox" className="form-checkbox" onChange={(e) => {
-                                            const newProps = e.target.checked ? [...request.properties, propId] : request.properties.filter(p => p !== propId);
-                                            setRequest({...request, properties: newProps});
-                                        }}/> <span>{initialBoardState[propId].name}</span>
-                                    </label>
-                                ))}
+                        <div className="flex justify-center gap-4 mt-6">
+                            <button onClick={handleAcceptTrade} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">Accept</button>
+                            <button onClick={handleRejectTrade} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded">Reject</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div>
+                        <h2 className="text-2xl font-bold mb-4 text-center">Propose a Trade</h2>
+                        <select onChange={(e) => setTradePartnerId(e.target.value)} value={tradePartnerId} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white">
+                            <option value="">Select a player...</option>
+                            {Object.values(gameState.players).filter(p => p.id !== currentPlayerId).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                        {tradePartner && (
+                             <div className="flex gap-6">
+                                <div className="flex-1 border border-gray-600 p-4 rounded-lg">
+                                    <h3 className="text-xl font-semibold mb-2 text-center">Your Offer</h3>
+                                    <label className="block mb-2">Money: ${offer.money}</label>
+                                    <input type="range" min="0" max={me.money} value={offer.money} onChange={(e) => setOffer({...offer, money: Number(e.target.value)})} className="w-full" />
+                                    <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
+                                        {getPlayerProperties(me).map(propId => (
+                                            <label key={propId} className="flex items-center space-x-2">
+                                                <input type="checkbox" className="form-checkbox" onChange={(e) => {
+                                                    const newProps = e.target.checked ? [...offer.properties, propId] : offer.properties.filter(p => p !== propId);
+                                                    setOffer({...offer, properties: newProps});
+                                                }}/> <span>{initialBoardState[propId].name}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex-1 border border-gray-600 p-4 rounded-lg">
+                                    <h3 className="text-xl font-semibold mb-2 text-center">Their Request</h3>
+                                    <label className="block mb-2">Money: ${request.money}</label>
+                                    <input type="range" min="0" max={tradePartner.money} value={request.money} onChange={(e) => setRequest({...request, money: Number(e.target.value)})} className="w-full" />
+                                    <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
+                                        {getPlayerProperties(tradePartner).map(propId => (
+                                            <label key={propId} className="flex items-center space-x-2">
+                                                <input type="checkbox" className="form-checkbox" onChange={(e) => {
+                                                    const newProps = e.target.checked ? [...request.properties, propId] : request.properties.filter(p => p !== propId);
+                                                    setRequest({...request, properties: newProps});
+                                                }}/> <span>{initialBoardState[propId].name}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
+                        )}
+                        <div className="flex justify-center gap-4 mt-6">
+                            <button onClick={handleSendOffer} disabled={!tradePartnerId} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded disabled:bg-gray-500">Send Offer</button>
                         </div>
                     </div>
                 )}
-                
-                <div className="flex justify-center gap-4 mt-6">
-                    <button onClick={handleSendOffer} disabled={!tradePartnerId} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded disabled:bg-gray-500">Send Offer</button>
-                    <button onClick={() => setShowTradeModal(false)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded">Cancel</button>
-                </div>
             </div>
         </div>
     );
 }
+
+interface TradesWidgetProps {
+    gameState: GameState;
+    currentPlayerId: PlayerId;
+    onViewTrade: (tradeId: string) => void;
+}
+
+const TradesWidget: FC<TradesWidgetProps> = ({ gameState, currentPlayerId, onViewTrade }) => {
+    const pendingTrades = Object.values(gameState.trades || {}).filter(t => t.status === 'pending');
+
+    const handleCancelTrade = async (tradeId: string) => {
+        if (window.confirm("Are you sure you want to cancel this trade offer?")) {
+            await updateDoc(doc(db, "games", gameState.gameId), {
+                [`trades.${tradeId}`]: deleteField(),
+                gameLog: arrayUnion(`${gameState.players[currentPlayerId].name} cancelled a trade offer.`)
+            });
+        }
+    };
+
+    return (
+        <div>
+            <h2 className="text-xl font-semibold mb-2">Open Trades</h2>
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                {pendingTrades.length > 0 ? pendingTrades.map(trade => {
+                    const fromPlayer = gameState.players[trade.fromPlayer];
+                    const toPlayer = gameState.players[trade.toPlayer];
+                    return (
+                        <div key={trade.id} className="bg-gray-700 p-2 rounded-md border border-gray-600 text-sm">
+                            <p><strong>From:</strong> {fromPlayer.name}</p>
+                            <p><strong>To:</strong> {toPlayer.name}</p>
+                            {currentPlayerId === trade.toPlayer && (
+                                <button onClick={() => onViewTrade(trade.id)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-xs">
+                                    View Offer
+                                </button>
+                            )}
+                             {currentPlayerId === trade.fromPlayer && (
+                                <button onClick={() => handleCancelTrade(trade.id)} className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">
+                                    Cancel Offer
+                                </button>
+                            )}
+                        </div>
+                    );
+                }) : <p className="text-gray-400">No open trades.</p>}
+            </div>
+        </div>
+    );
+};
 
 interface BoardProps {
     players: Record<PlayerId, Player>;
@@ -956,7 +1090,7 @@ interface GameRoomProps {
 
 const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [gameState, setGameState] = useState<GameState | null>(null);
-    const [showTradeModal, setShowTradeModal] = useState(false);
+    const [activeTradeModal, setActiveTradeModal] = useState<string | null>(null);
     const [lastProcessedLog, setLastProcessedLog] = useState("");
     const [hasRolled, setHasRolled] = useState(false);
 
@@ -1155,10 +1289,12 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     )}
                     <div className="grid grid-cols-2 gap-2 mb-4">
                         <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded">Declare Bankruptcy</button>
-                        <button onClick={() => setShowTradeModal(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">Propose Trade</button>
+                        <button onClick={() => setActiveTradeModal('new')} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">Propose Trade</button>
                     </div>
+
+                    <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />
                     
-                    <div>
+                    <div className="mt-4">
                         <h2 className="text-xl font-semibold mb-2">Your Properties</h2>
                         <div className="space-y-1.5 max-h-60 overflow-y-auto pr-2">
                             {myProperties.length > 0 ? myProperties.map(propId => {
@@ -1196,7 +1332,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     </div>
                 </div>
             </div>
-            {(showTradeModal || (gameState.trade?.active && gameState.trade?.toPlayer === currentPlayerId)) && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setShowTradeModal} />}
+            {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} />}
             {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />}
         </div>
     );
