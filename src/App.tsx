@@ -57,15 +57,22 @@ interface Trade {
     status: 'pending' | 'accepted' | 'rejected';
 }
 
+interface GameSettings {
+    initialMoney: number;
+    maxPlayers: number;
+    allowAuctions: boolean;
+    allowOwnedPropertyAuctions: boolean;
+    allowMortgage: boolean;
+    rentInJail: boolean;
+    taxInVacationPot: boolean;
+}
+
 interface GameState {
     gameId: RoomId;
     hostId: PlayerId;
     status: 'waiting' | 'in-progress' | 'finished';
     board: BoardState;
-    settings: {
-        initialMoney: number;
-        maxPlayers: number;
-    };
+    settings: GameSettings;
     players: Record<PlayerId, Player>;
     turnOrder: PlayerId[];
     currentPlayerTurn: PlayerId;
@@ -255,6 +262,14 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
 
     const renter = gameState.players[renterId];
     const owner = gameState.players[squareState.owner];
+
+    if (owner.inJail && !gameState.settings.rentInJail) {
+        await updateDoc(doc(db, "games", roomId), {
+            gameLog: arrayUnion(`${owner.name} is in jail and cannot collect rent.`)
+        });
+        return;
+    }
+
     let rentAmount = 0;
 
     switch (squareInfo.type) {
@@ -291,6 +306,20 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
 };
 
 const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: PlayerId | null = null) => {
+    const gameDoc = await getDoc(doc(db, "games", roomId));
+    if (!gameDoc.exists()) return;
+    const gameState = gameDoc.data() as GameState;
+
+    if (sellerId && !gameState.settings.allowOwnedPropertyAuctions) {
+        alert("Auctioning owned properties is disabled for this game.");
+        return;
+    }
+
+    if (!sellerId && !gameState.settings.allowAuctions) {
+        alert("Auctions for unowned properties are disabled for this game.");
+        return;
+    }
+
     const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     await updateDoc(doc(db, "games", roomId), {
         auction: {
@@ -335,11 +364,16 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
         case 'tax': {
             const taxSquare = square as TaxSquare;
             const taxAmount = taxSquare.amount < 1 ? Math.floor(player.money * taxSquare.amount) : taxSquare.amount;
-            await updateDoc(gameRef, {
+            const updates: DocumentData = {
                 [`players.${playerId}.money`]: increment(-taxAmount),
-                vacationPot: increment(taxAmount),
-                gameLog: arrayUnion(`${player.name} paid $${taxAmount} for ${taxSquare.name}.`)
-            });
+            };
+            let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
+            if (gameState.settings.taxInVacationPot) {
+                updates.vacationPot = increment(taxAmount);
+                logMessage += ` The money goes to the vacation pot.`
+            }
+            updates.gameLog = arrayUnion(logMessage);
+            await updateDoc(gameRef, updates);
             break;
         }
         case 'vacation': {
@@ -387,6 +421,10 @@ const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition:
 };
 
 const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+    if (!gameState.settings.allowMortgage) {
+        alert("Mortgaging is disabled for this game.");
+        return;
+    }
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const propertyState = gameState.board[propertyId];
 
@@ -405,6 +443,10 @@ const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: 
 };
 
 const unmortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+    if (!gameState.settings.allowMortgage) {
+        alert("Mortgaging is disabled for this game.");
+        return;
+    }
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const player = gameState.players[playerId];
     const unmortgageCost = (propertyInfo.cost / 2) * 1.1;
@@ -470,12 +512,6 @@ const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId,
 };
 
 
-// const handleDeleteGame = async (roomId: RoomId) => {
-//     if (window.confirm("Are you sure you want to delete this game? This action cannot be undone.")) {
-//         await deleteDoc(doc(db, "games", roomId));
-//     }
-// };
-
 // ==========================================================
 // WIDGET COMPONENTS
 // ==========================================================
@@ -530,6 +566,51 @@ const PlayerProfileWidget: FC<PlayerProfileProps> = ({ currentPlayerId }) => {
     );
 };
 
+interface AdminSettingsWidgetProps {
+    gameState: GameState;
+    roomId: RoomId;
+}
+
+const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId }) => {
+    const { settings } = gameState;
+
+    const handleSettingChange = async (setting: keyof GameSettings, value: boolean) => {
+        if (gameState.status !== 'waiting') {
+            alert("Settings can only be changed before the game starts.");
+            return;
+        }
+        await updateDoc(doc(db, "games", roomId), {
+            [`settings.${setting}`]: value,
+            gameLog: arrayUnion(`Admin changed ${setting} to ${value ? 'enabled' : 'disabled'}.`)
+        });
+    };
+
+    const ToggleButton: FC<{label: string, settingKey: keyof GameSettings, currentValue: boolean}> = ({label, settingKey, currentValue}) => (
+        <div className="flex justify-between items-center bg-gray-800 p-2 rounded">
+            <label htmlFor={settingKey} className="text-sm text-gray-300">{label}</label>
+            <button
+                id={settingKey}
+                onClick={() => handleSettingChange(settingKey, !currentValue)}
+                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${currentValue ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}
+            >
+                {currentValue ? 'ON' : 'OFF'}
+            </button>
+        </div>
+    );
+
+    return (
+        <div className="bg-gray-700 p-2.5 rounded mb-4">
+            <h2 className="text-xl font-semibold mb-2 text-center">Admin Settings</h2>
+            <div className="space-y-2">
+                <ToggleButton label="Unowned Prop. Auctions" settingKey="allowAuctions" currentValue={settings.allowAuctions} />
+                <ToggleButton label="Owned Prop. Auctions" settingKey="allowOwnedPropertyAuctions" currentValue={settings.allowOwnedPropertyAuctions} />
+                <ToggleButton label="Mortgaging" settingKey="allowMortgage" currentValue={settings.allowMortgage} />
+                <ToggleButton label="Rent in Jail" settingKey="rentInJail" currentValue={settings.rentInJail} />
+                <ToggleButton label="Tax to Vacation Pot" settingKey="taxInVacationPot" currentValue={settings.taxInVacationPot} />
+            </div>
+        </div>
+    );
+};
 
 // ==========================================================
 // REACT COMPONENTS
@@ -596,7 +677,15 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             hostId: currentPlayerId,
             status: "waiting",
             board: getInitialDynamicBoardState(),
-            settings: { initialMoney: Number(initialMoney), maxPlayers: maxPlayers },
+            settings: { 
+                initialMoney: Number(initialMoney), 
+                maxPlayers: maxPlayers,
+                allowAuctions: true,
+                allowOwnedPropertyAuctions: true,
+                allowMortgage: true,
+                rentInJail: false,
+                taxInVacationPot: true,
+            },
             players: {
                 [currentPlayerId]: { id: currentPlayerId, name: playerName, money: Number(initialMoney), position: 0, cities: [], airports: [], harbours: [], companies: [], inJail: false, jailTurns: 0, doublesCount: 0, onVacation: false, color: playerColors[0] }
             },
@@ -1057,7 +1146,7 @@ interface BoardProps {
 // ... (previous code in App.tsx)
 
 const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
-    const { players, board: boardState, gameLog } = gameState;
+    const { players, board: boardState } = gameState;
 
     const getGridPosition = (i: number): { gridArea: string } => {
         let row, col;
@@ -1180,14 +1269,24 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         )}
                         {isMyProperty && (
                             <>
-                                <button onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm">{cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as UtilitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as UtilitySquare).cost / 2})`}</button>
+                                <button 
+                                    onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} 
+                                    disabled={!gameState.settings.allowMortgage}
+                                    className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                        {cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as UtilitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as UtilitySquare).cost / 2})`}
+                                </button>
                                 {cellInfo.type === 'city' && !cellState.mortgaged && (
                                     <div className="flex w-full gap-1 mb-1">
                                         <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">Build</button>
                                         <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm">Sell</button>
                                     </div>
                                 )}
-                                <button onClick={() => startAuction(roomId, String(i), currentPlayerId)} className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm">Auction</button>
+                                <button 
+                                    onClick={() => startAuction(roomId, String(i), currentPlayerId)} 
+                                    disabled={!gameState.settings.allowOwnedPropertyAuctions}
+                                    className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                    Auction
+                                </button>
                             </>
                         )}
                     </div>
@@ -1205,7 +1304,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     style={{ gridColumn: '2 / 15', gridRow: '2 / 15' }}
                 >
                     <div className="w-full h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-20 rounded text-gray-100">
-                       {gameLog.slice().reverse().map((msg, i) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-lg">{msg}</p>)}
+                       {gameState.gameLog.slice().reverse().map((msg: string, i: number) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-lg">{msg}</p>)}
                     </div>
                 </div>
             </div>
@@ -1433,10 +1532,13 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     </div>
 
                     {gameState.status === "waiting" && currentPlayerId === gameState.hostId && (
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
-                            <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
-                        </div>
+                        <>
+                            <div className="flex gap-2 mb-4">
+                                <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
+                                <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
+                            </div>
+                            <AdminSettingsWidget gameState={gameState} roomId={roomId} />
+                        </>
                     )}
                     
                     <h2 className="text-xl font-semibold mb-2">Players</h2>
@@ -1470,9 +1572,9 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 mb-4">
-                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={!gameState || gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Declare Bankruptcy</button>
-                        <button onClick={() => setActiveTradeModal('new')} disabled={!gameState || gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
-                        <button onClick={() => setShowStatsModal(true)} disabled={!gameState || gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Game Stats</button>
+                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Declare Bankruptcy</button>
+                        <button onClick={() => setActiveTradeModal('new')} disabled={gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
+                        <button onClick={() => setShowStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Game Stats</button>
                     </div>
 
                     {gameState.status === 'in-progress' && <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />}
