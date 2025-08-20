@@ -463,11 +463,11 @@ const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId,
 };
 
 
-const handleDeleteGame = async (roomId: RoomId) => {
-    if (window.confirm("Are you sure you want to delete this game? This action cannot be undone.")) {
-        await deleteDoc(doc(db, "games", roomId));
-    }
-};
+// const handleDeleteGame = async (roomId: RoomId) => {
+//     if (window.confirm("Are you sure you want to delete this game? This action cannot be undone.")) {
+//         await deleteDoc(doc(db, "games", roomId));
+//     }
+// };
 
 // ==========================================================
 // WIDGET COMPONENTS
@@ -1164,6 +1164,31 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
 // ... (rest of the code in App.tsx)
 
+interface DeleteConfirmModalProps {
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+
+const DeleteConfirmModal: FC<DeleteConfirmModalProps> = ({ onConfirm, onCancel }) => {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-xl w-full max-w-sm relative">
+                <button onClick={onCancel} className="absolute top-2 right-2 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                <h2 className="text-2xl font-bold mb-4 text-center">Delete Game</h2>
+                <p className="text-center text-gray-300 mb-6">Are you sure you want to delete this game? This action cannot be undone.</p>
+                <div className="flex justify-center gap-4">
+                    <button onClick={onConfirm} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded">OK</button>
+                    <button onClick={onCancel} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded">Cancel</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 interface GameRoomProps {
     roomId: RoomId;
     currentPlayerId: PlayerId;
@@ -1172,6 +1197,7 @@ interface GameRoomProps {
 const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [activeTradeModal, setActiveTradeModal] = useState<string | null>(null);
+    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [lastProcessedLog, setLastProcessedLog] = useState("");
     const [hasRolled, setHasRolled] = useState(false);
 
@@ -1293,6 +1319,16 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         
         await updateDoc(doc(db, "games", roomId), updates);
     };
+
+    const handleDeleteGame = () => {
+        setShowDeleteConfirmModal(true);
+    };
+
+    const confirmDeleteGame = async () => {
+        await deleteDoc(doc(db, "games", roomId));
+        setShowDeleteConfirmModal(false);
+        window.location.href = '/';
+    };
     
     if (!gameState) {
         return (
@@ -1345,7 +1381,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     {gameState.status === "waiting" && currentPlayerId === gameState.hostId && (
                         <div className="flex gap-2 mb-4">
                             <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
-                            <button onClick={() => handleDeleteGame(roomId)} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
+                            <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
                         </div>
                     )}
                     
@@ -1390,6 +1426,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             </div>
             {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} />}
             {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />}
+            {showDeleteConfirmModal && <DeleteConfirmModal onConfirm={confirmDeleteGame} onCancel={() => setShowDeleteConfirmModal(false)} />}
         </div>
     );
 };
