@@ -1003,6 +1003,8 @@ interface BoardProps {
     roomId: RoomId;
 }
 
+// ... (previous code in App.tsx)
+
 const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     const { players, board: boardState, gameLog } = gameState;
 
@@ -1043,14 +1045,14 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         let popupPositionClass = '';
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '70px';
+            wrapperStyle.height = '120px';
             popupPositionClass = 'left-full top-0 ml-2';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '60px';
-            wrapperStyle.height = '100px';
+            wrapperStyle.width = '70px';
+            wrapperStyle.height = '120px';
             popupPositionClass = 'right-full top-0 mr-2';
         }
         if (isTopSide) {
@@ -1147,8 +1149,11 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         <div className="flex justify-center items-center p-5">
             <div className="grid grid-cols-[120px_repeat(13,_70px)_120px] grid-rows-[120px_repeat(13,_70px)_120px] gap-0.5 bg-black border-2 border-gray-500 relative">
                 {cells}
-                <div className="col-start-2 col-span-13 row-start-2 row-span-13 bg-[#3a4d3b] p-4 box-border">
-                    <div className="h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-20 rounded text-gray-100">
+                <div 
+                    className="bg-[#3a4d3b] p-4 box-border flex items-center justify-center" 
+                    style={{ gridColumn: '2 / 15', gridRow: '2 / 15' }}
+                >
+                    <div className="w-full h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-20 rounded text-gray-100">
                        {gameLog.slice().reverse().map((msg, i) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-lg">{msg}</p>)}
                     </div>
                 </div>
@@ -1156,6 +1161,8 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         </div>
     );
 };
+
+// ... (rest of the code in App.tsx)
 
 interface GameRoomProps {
     roomId: RoomId;
