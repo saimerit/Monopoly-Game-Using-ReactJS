@@ -179,7 +179,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     37: { name: "Toronto", type: "city", country: "Canada", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Vancouver", type: "city", country: "Canada", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
-    40: { name: "Luxury Tax", type: "tax", amount: 100 },
+    40: { name: "Luxury Tax", type: "tax", amount: 75 },
     41: { name: "Rio de Janeiro", type: "city", country: "Brazil", cost: 420, rent: [60, 220, 650, 1500, 1800, 2100] },
     42: { name: "Go to Jail", type: "go-to-jail-square" },
     43: { name: "Sao Paulo", type: "city", country: "Brazil", cost: 420, rent: [60, 220, 650, 1500, 1800, 2100] },
@@ -317,6 +317,13 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
     });
 
     switch (square.type) {
+        case 'go': {
+            await updateDoc(gameRef, {
+                [`players.${playerId}.money`]: increment(300),
+                gameLog: arrayUnion(`${player.name} landed on GO and collected $300.`)
+            });
+            break;
+        }
         case 'city':
         case 'airport':
         case 'harbour':
@@ -331,7 +338,7 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
             await updateDoc(gameRef, {
                 [`players.${playerId}.money`]: increment(-taxAmount),
                 vacationPot: increment(taxAmount),
-                gameLog: arrayUnion(`${player.name} paid $${taxAmount} in tax.`)
+                gameLog: arrayUnion(`${player.name} paid $${taxAmount} for ${taxSquare.name}.`)
             });
             break;
         }
@@ -969,14 +976,14 @@ const TradesWidget: FC<TradesWidgetProps> = ({ gameState, currentPlayerId, onVie
     };
 
     return (
-        <div>
+        <div className="bg-gray-700 p-2.5 rounded mb-4">
             <h2 className="text-xl font-semibold mb-2">Open Trades</h2>
             <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
                 {pendingTrades.length > 0 ? pendingTrades.map(trade => {
                     const fromPlayer = gameState.players[trade.fromPlayer];
                     const toPlayer = gameState.players[trade.toPlayer];
                     return (
-                        <div key={trade.id} className="bg-gray-700 p-2 rounded-md border border-gray-600 text-sm">
+                        <div key={trade.id} className="bg-gray-800 p-2 rounded-md border border-gray-600 text-sm">
                             <p><strong>From:</strong> {fromPlayer.name}</p>
                             <p><strong>To:</strong> {toPlayer.name}</p>
                             {currentPlayerId === trade.toPlayer && (
@@ -996,6 +1003,50 @@ const TradesWidget: FC<TradesWidgetProps> = ({ gameState, currentPlayerId, onVie
         </div>
     );
 };
+
+
+interface StatsModalProps {
+    gameState: GameState;
+    onClose: () => void;
+}
+
+const StatsModal: FC<StatsModalProps> = ({ gameState, onClose }) => {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-xl w-full max-w-4xl h-3/4 relative flex flex-col">
+                <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                <h2 className="text-3xl font-bold mb-4 text-center">Game Statistics</h2>
+                <div className="overflow-y-auto flex-grow pr-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Object.values(gameState.players).map(player => {
+                            const allProperties = [...player.cities, ...player.airports, ...player.harbours, ...player.companies];
+                            return (
+                                <div key={player.id} className="bg-gray-700 border border-gray-600 p-3 rounded-lg">
+                                    <h3 className="text-xl font-semibold mb-2" style={{ color: player.color }}>{player.name}</h3>
+                                    <p className="mb-2">Money: ${player.money}</p>
+                                    {allProperties.length > 0 ? (
+                                        <ul className="list-disc list-inside text-sm space-y-1">
+                                            {allProperties.map(propId => (
+                                                <li key={propId}>{initialBoardState[propId]?.name || 'Unknown Property'}</li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-sm text-gray-400">No properties owned.</p>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 interface BoardProps {
     gameState: GameState;
@@ -1200,6 +1251,8 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [lastProcessedLog, setLastProcessedLog] = useState("");
     const [hasRolled, setHasRolled] = useState(false);
+    const [showStatsModal, setShowStatsModal] = useState(false);
+
 
     useEffect(() => {
         const gameRef = doc(db, "games", roomId);
@@ -1271,7 +1324,8 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             return;
         }
 
-        const newPosition = (player.position + diceRoll) % 56;
+        const oldPosition = player.position;
+        const newPosition = (oldPosition + diceRoll) % 56;
         const updates: DocumentData = {
             [`players.${currentPlayerId}.position`]: newPosition,
             [`players.${currentPlayerId}.doublesCount`]: doublesCount,
@@ -1279,7 +1333,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         
         const logMessages = [`${player.name} rolled a ${diceRoll}${isDoubles ? ' (doubles!)' : ''}.`];
 
-        if (newPosition < player.position && !player.inJail) {
+        if (newPosition < oldPosition && newPosition !== 0 && !player.inJail) {
             const amount = 200;
             updates[`players.${currentPlayerId}.money`] = increment(amount);
             logMessages.push(`${player.name} passed GO and collected $${amount}.`);
@@ -1416,17 +1470,19 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 mb-4">
-                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded">Declare Bankruptcy</button>
-                        <button onClick={() => setActiveTradeModal('new')} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">Propose Trade</button>
+                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={!gameState || gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Declare Bankruptcy</button>
+                        <button onClick={() => setActiveTradeModal('new')} disabled={!gameState || gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
+                        <button onClick={() => setShowStatsModal(true)} disabled={!gameState || gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Game Stats</button>
                     </div>
 
-                    <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />
+                    {gameState.status === 'in-progress' && <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />}
                     
                 </div>
             </div>
             {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} />}
             {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />}
             {showDeleteConfirmModal && <DeleteConfirmModal onConfirm={confirmDeleteGame} onCancel={() => setShowDeleteConfirmModal(false)} />}
+            {showStatsModal && <StatsModal gameState={gameState} onClose={() => setShowStatsModal(false)} />}
         </div>
     );
 };
