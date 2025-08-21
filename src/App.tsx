@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { FC, ReactNode } from 'react';
-import { db } from './firebase'; 
-import { 
-    doc, setDoc, updateDoc, onSnapshot, arrayUnion, deleteField, 
-    runTransaction, collection, getDocs, increment, getDoc, deleteDoc, 
+import { db } from './firebase';
+import {
+    doc, setDoc, updateDoc, onSnapshot, arrayUnion, deleteField,
+    runTransaction, collection, getDocs, increment, getDoc, deleteDoc,
     Transaction, writeBatch
 } from "firebase/firestore";
 import type { DocumentData } from "firebase/firestore";
@@ -118,7 +118,7 @@ const generateId = (): string => Math.random().toString(36).substring(2, 10);
 const playerColors: string[] = ['#d9534f', '#5cb85c', '#0275d8', '#f0ad4e', '#5bc0de', '#9b59b6', '#34495e', '#e74c3c'];
 
 const countryData: Record<string, { cities: number[]; houseCost: number }> = {
-    "India":    { cities: [1, 3, 6],    houseCost: 50 },
+    "Brazil":    { cities: [1, 3, 6],    houseCost: 50 },
     "China":    { cities: [8, 9, 11],   houseCost: 50 },
     "Japan":    { cities: [13, 15],     houseCost: 100 },
     "Germany":  { cities: [17, 18, 20], houseCost: 100 },
@@ -126,7 +126,7 @@ const countryData: Record<string, { cities: number[]; houseCost: number }> = {
     "France":   { cities: [27, 29, 30, 51], houseCost: 150 },
     "UK":       { cities: [32, 33, 35, 52], houseCost: 200 },
     "Canada":   { cities: [37, 39],     houseCost: 200 },
-    "Brazil":   { cities: [41, 43, 44], houseCost: 220 },
+    "India":   { cities: [41, 43, 44], houseCost: 220 },
     "Australia":{ cities: [46, 48, 49], houseCost: 220 },
     "USA":      { cities: [53, 54, 55], houseCost: 250 },
 };
@@ -147,27 +147,27 @@ const countryFlags: Record<string, ReactNode> = {
 
 const initialBoardState: Record<string, BoardSquare> = {
     0: { name: "GO", type: "go" },
-    1: { name: "Mumbai", type: "city", country: "India", cost: 60, rent: [2, 10, 30, 90, 160, 250] },
+    1: { name: "Rio de Janeiro", type: "city", country: "Brazil", cost: 60, rent: [4, 20, 60, 180, 320, 450] },
     2: { name: "Treasure Chest", type: "treasure" },
-    3: { name: "Delhi", type: "city", country: "India", cost: 60, rent: [4, 20, 60, 180, 320, 450] },
-    4: { name: "Income Tax", type: "tax", amount: 0.10 },
-    5: { name: "Airport 1", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
-    6: { name: "Hyderabad", type: "city", country: "India", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
+    3: { name: "Sao Paulo", type: "city", country: "Brazil", cost: 60, rent: [4, 20, 60, 180, 320, 450] },
+    4: { name: "Income Tax (10%)", type: "tax", amount: 0.10 },
+    5: { name: "Airport 1", type: "airport", cost: 200, rent: [25, 50, 100, 200] },
+    6: { name: "Brasilia", type: "city", country: "Brazil", cost: 80, rent: [6, 30, 90, 270, 400, 550] },
     7: { name: "Surprise", type: "surprise" },
     8: { name: "Beijing", type: "city", country: "China", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
-    9: { name: "Shanghai", type: "city", country: "China", cost: 120, rent: [8, 40, 100, 300, 450, 600] },
-    10: { name: "Harbour 1", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
-    11: { name: "Shenzhen", type: "city", country: "China", cost: 140, rent: [10, 50, 150, 450, 625, 750] },
+    9: { name: "Shanghai", type: "city", country: "China", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
+    10: { name: "Harbour 1", type: "harbour", cost: 150, rent: [4, 10] },
+    11: { name: "Shenzhen", type: "city", country: "China", cost: 120, rent: [8, 40, 100, 300, 450, 600] },
     12: { name: "Tech Corp", type: "company", cost: 150, rent: [] },
     13: { name: "Tokyo", type: "city", country: "Japan", cost: 140, rent: [10, 50, 150, 450, 625, 750] },
     14: { name: "Jail / Visiting", type: "jail" },
     15: { name: "Osaka", type: "city", country: "Japan", cost: 160, rent: [12, 60, 180, 500, 700, 900] },
-    16: { name: "Airport 2", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
+    16: { name: "Airport 2", type: "airport", cost: 200, rent: [25, 50, 100, 200] },
     17: { name: "Berlin", type: "city", country: "Germany", cost: 180, rent: [14, 70, 200, 550, 750, 950] },
     18: { name: "Munich", type: "city", country: "Germany", cost: 180, rent: [14, 70, 200, 550, 750, 950] },
     19: { name: "Treasure Chest", type: "treasure" },
     20: { name: "Hamburg", type: "city", country: "Germany", cost: 200, rent: [16, 80, 220, 600, 800, 1000] },
-    21: { name: "Harbour 2", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
+    21: { name: "Harbour 2", type: "harbour", cost: 150, rent: [4, 10] },
     22: { name: "Moscow", type: "city", country: "Russia", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
     23: { name: "Surprise", type: "surprise" },
     24: { name: "St. Petersburg", type: "city", country: "Russia", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
@@ -177,31 +177,31 @@ const initialBoardState: Record<string, BoardSquare> = {
     28: { name: "Vacation", type: "vacation" },
     29: { name: "Marseille", type: "city", country: "France", cost: 260, rent: [22, 110, 330, 800, 975, 1150] },
     30: { name: "Lyon", type: "city", country: "France", cost: 280, rent: [24, 120, 360, 850, 1025, 1200] },
-    31: { name: "Airport 3", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
+    31: { name: "Airport 3", type: "airport", cost: 200, rent: [25, 50, 100, 200] },
     32: { name: "London", type: "city", country: "UK", cost: 300, rent: [26, 130, 390, 900, 1100, 1275] },
     33: { name: "Manchester", type: "city", country: "UK", cost: 300, rent: [26, 130, 390, 900, 1100, 1275] },
     34: { name: "Treasure Chest", type: "treasure" },
     35: { name: "Liverpool", type: "city", country: "UK", cost: 320, rent: [28, 150, 450, 1000, 1200, 1400] },
-    36: { name: "Harbour 3", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
+    36: { name: "Harbour 3", type: "harbour", cost: 150, rent: [4, 10] },
     37: { name: "Toronto", type: "city", country: "Canada", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Vancouver", type: "city", country: "Canada", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
-    40: { name: "Luxury Tax", type: "tax", amount: 75 },
-    41: { name: "Rio de Janeiro", type: "city", country: "Brazil", cost: 420, rent: [60, 220, 650, 1500, 1800, 2100] },
+    40: { name: "Luxury Tax", type: "tax", amount: 100 },
+    41: { name: "Mumbai", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     42: { name: "Go to Jail", type: "go-to-jail-square" },
-    43: { name: "Sao Paulo", type: "city", country: "Brazil", cost: 420, rent: [60, 220, 650, 1500, 1800, 2100] },
-    44: { name: "Brasilia", type: "city", country: "Brazil", cost: 450, rent: [70, 250, 700, 1600, 1900, 2200] },
-    45: { name: "Airport 4", type: "airport", cost: 200, rent: [100, 150, 200, 300] },
-    46: { name: "Sydney", type: "city", country: "Australia", cost: 475, rent: [80, 280, 750, 1700, 2000, 2400] },
+    43: { name: "Delhi", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
+    44: { name: "Hyderabad", type: "city", country: "India", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
+    45: { name: "Airport 4", type: "airport", cost: 200, rent: [25, 50, 100, 200] },
+    46: { name: "Sydney", type: "city", country: "Australia", cost: 425, rent: [55, 225, 650, 1500, 1800, 2100] },
     47: { name: "Treasure Chest", type: "treasure" },
-    48: { name: "Melbourne", type: "city", country: "Australia", cost: 475, rent: [80, 280, 750, 1700, 2000, 2400] },
-    49: { name: "Canberra", type: "city", country: "Australia", cost: 500, rent: [90, 300, 800, 1800, 2100, 2500] },
-    50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [100, 150, 200, 300] },
-    51: { name: "Nice", type: "city", country: "France", cost: 525, rent: [100, 320, 850, 1900, 2200, 2600] },
-    52: { name: "Glasgow", type: "city", country: "UK", cost: 525, rent: [100, 320, 850, 1900, 2200, 2600] },
-    53: { name: "New York", type: "city", country: "USA", cost: 550, rent: [110, 350, 900, 2000, 2400, 2800] },
-    54: { name: "Los Angeles", type: "city", country: "USA", cost: 550, rent: [110, 350, 900, 2000, 2400, 2800] },
-    55: { name: "Chicago", type: "city", country: "USA", cost: 600, rent: [120, 400, 1000, 2200, 2600, 3000] },
+    48: { name: "Melbourne", type: "city", country: "Australia", cost: 425, rent: [55, 225, 650, 1500, 1800, 2100] },
+    49: { name: "Canberra", type: "city", country: "Australia", cost: 450, rent: [60, 250, 700, 1600, 1900, 2200] },
+    50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [4, 10] },
+    51: { name: "Nice", type: "city", country: "France", cost: 475, rent: [65, 275, 750, 1700, 2000, 2400] },
+    52: { name: "Glasgow", type: "city", country: "UK", cost: 500, rent: [70, 300, 800, 1800, 2100, 2500] },
+    53: { name: "New York", type: "city", country: "USA", cost: 550, rent: [75, 325, 850, 1900, 2200, 2600] },
+    54: { name: "Los Angeles", type: "city", country: "USA", cost: 550, rent: [75, 325, 850, 1900, 2200, 2600] },
+    55: { name: "Chicago", type: "city", country: "USA", cost: 600, rent: [80, 350, 900, 2000, 2400, 2800] },
 };
 
 const getInitialDynamicBoardState = (): BoardState => {
@@ -285,8 +285,7 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
             break;
         }
         case 'harbour': {
-            const harboursOwned = owner.harbours.length;
-            rentAmount = squareInfo.rent[harboursOwned - 1] || 0;
+            rentAmount = squareInfo.rent[0] * diceRoll;
             break;
         }
         case 'company': {
@@ -569,20 +568,31 @@ const PlayerProfileWidget: FC<PlayerProfileProps> = ({ currentPlayerId }) => {
 interface AdminSettingsWidgetProps {
     gameState: GameState;
     roomId: RoomId;
+    currentPlayerId: PlayerId;
 }
 
-const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId }) => {
+const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, currentPlayerId }) => {
     const { settings } = gameState;
+    const isHost = gameState.hostId === currentPlayerId;
 
-    const handleSettingChange = async (setting: keyof GameSettings, value: boolean) => {
-        if (gameState.status !== 'waiting') {
-            alert("Settings can only be changed before the game starts.");
+    const handleSettingChange = async (setting: keyof GameSettings, value: boolean | number) => {
+        if (gameState.status !== 'waiting' || !isHost) {
+            alert("Settings can only be changed by the host before the game starts.");
             return;
         }
-        await updateDoc(doc(db, "games", roomId), {
+
+        const updates: DocumentData = {
             [`settings.${setting}`]: value,
-            gameLog: arrayUnion(`Admin changed ${setting} to ${value ? 'enabled' : 'disabled'}.`)
-        });
+            gameLog: arrayUnion(`Admin changed ${setting} to ${value}.`)
+        };
+
+        if (setting === 'initialMoney') {
+            Object.keys(gameState.players).forEach(playerId => {
+                updates[`players.${playerId}.money`] = value;
+            });
+        }
+
+        await updateDoc(doc(db, "games", roomId), updates);
     };
 
     const ToggleButton: FC<{label: string, settingKey: keyof GameSettings, currentValue: boolean}> = ({label, settingKey, currentValue}) => (
@@ -591,7 +601,8 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId }
             <button
                 id={settingKey}
                 onClick={() => handleSettingChange(settingKey, !currentValue)}
-                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${currentValue ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}
+                disabled={!isHost || gameState.status !== 'waiting'}
+                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${currentValue ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} disabled:bg-gray-500 disabled:cursor-not-allowed`}
             >
                 {currentValue ? 'ON' : 'OFF'}
             </button>
@@ -600,8 +611,25 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId }
 
     return (
         <div className="bg-gray-700 p-2.5 rounded mb-4">
-            <h2 className="text-xl font-semibold mb-2 text-center">Admin Settings</h2>
+            <h2 className="text-xl font-semibold mb-2 text-center">Game Settings</h2>
             <div className="space-y-2">
+                <div className="flex justify-between items-center bg-gray-800 p-2 rounded">
+                    <label htmlFor="initialMoney" className="text-sm text-gray-300">Initial Money</label>
+                    <select
+                        id="initialMoney"
+                        value={settings.initialMoney}
+                        onChange={(e) => handleSettingChange('initialMoney', Number(e.target.value))}
+                        disabled={!isHost || gameState.status !== 'waiting'}
+                        className="p-1 bg-gray-700 border border-gray-500 rounded text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                    >
+                        <option value="500">$500</option>
+                        <option value="1500">$1500</option>
+                        <option value="2500">$2500</option>
+                        <option value="3000">$3000</option>
+                        <option value="5000">$5000</option>
+                        <option value="10000">$10000</option>
+                    </select>
+                </div>
                 <ToggleButton label="Unowned Prop. Auctions" settingKey="allowAuctions" currentValue={settings.allowAuctions} />
                 <ToggleButton label="Owned Prop. Auctions" settingKey="allowOwnedPropertyAuctions" currentValue={settings.allowOwnedPropertyAuctions} />
                 <ToggleButton label="Mortgaging" settingKey="allowMortgage" currentValue={settings.allowMortgage} />
@@ -611,7 +639,6 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId }
         </div>
     );
 };
-
 // ==========================================================
 // REACT COMPONENTS
 // ==========================================================
@@ -656,7 +683,6 @@ interface LobbyProps {
 const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
     const [playerName, setPlayerName] = useState("");
     const [joinRoomId, setJoinRoomId] = useState("");
-    const [initialMoney, setInitialMoney] = useState(500);
     const maxPlayers = 8;
 
     const handleCreateGame = async () => {
@@ -665,6 +691,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
         let newRoomId: RoomId;
         let gameRef;
         let docSnap;
+        const initialMoney = 1500; // Default value
 
         do {
             newRoomId = generateRoomId();
@@ -678,7 +705,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             status: "waiting",
             board: getInitialDynamicBoardState(),
             settings: { 
-                initialMoney: Number(initialMoney), 
+                initialMoney: initialMoney, 
                 maxPlayers: maxPlayers,
                 allowAuctions: true,
                 allowOwnedPropertyAuctions: true,
@@ -687,7 +714,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                 taxInVacationPot: true,
             },
             players: {
-                [currentPlayerId]: { id: currentPlayerId, name: playerName, money: Number(initialMoney), position: 0, cities: [], airports: [], harbours: [], companies: [], inJail: false, jailTurns: 0, doublesCount: 0, onVacation: false, color: playerColors[0] }
+                [currentPlayerId]: { id: currentPlayerId, name: playerName, money: initialMoney, position: 0, cities: [], airports: [], harbours: [], companies: [], inJail: false, jailTurns: 0, doublesCount: 0, onVacation: false, color: playerColors[0] }
             },
             turnOrder: [currentPlayerId],
             currentPlayerTurn: currentPlayerId,
@@ -746,13 +773,6 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                     <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-lg">
                         <h2 className="text-2xl font-semibold mb-4">Create a New Game</h2>
                         <input type="text" placeholder="Enter Your Name" value={playerName} onChange={(e) => setPlayerName(e.target.value)} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white" />
-                        <label className="block mb-2">Initial Money:</label>
-                        <select value={initialMoney} onChange={(e) => setInitialMoney(Number(e.target.value))} className="w-full p-2 mb-4 bg-gray-700 border border-gray-500 rounded text-white">
-                            <option value="300">$300</option>
-                            <option value="500">$500</option>
-                            <option value="800">$800</option>
-                            <option value="1000">$1000</option>
-                        </select>
                         <p className="mb-4">Max Players: 8</p> 
                         <button onClick={handleCreateGame} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">Create Game</button>
                     </div>
@@ -1225,6 +1245,22 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
             );
         }
 
+        if (cellInfo.type === 'vacation') {
+            return (
+                <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+                    <div className="content-wrapper" style={wrapperStyle}>
+                        <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
+                        <div className="text-sm font-bold pb-1">${gameState.vacationPot || 0}</div>
+                    </div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
+                        {Object.values(players).map(p =>
+                            p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
         return (
             <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
@@ -1527,20 +1563,18 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     <h1 className="text-2xl font-bold mb-2">Room: {roomId}</h1>
                     <div className="bg-gray-700 p-2.5 rounded mb-4">
                         <p><strong>Admin:</strong> {gameState.players[gameState.hostId]?.name || 'N/A'}</p>
-                        <p><strong>Initial Money:</strong> ${gameState.settings.initialMoney}</p>
                         <p><strong>Vacation Pot:</strong> ${gameState.vacationPot || 0}</p>
                     </div>
 
                     {gameState.status === "waiting" && currentPlayerId === gameState.hostId && (
-                        <>
-                            <div className="flex gap-2 mb-4">
-                                <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
-                                <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
-                            </div>
-                            <AdminSettingsWidget gameState={gameState} roomId={roomId} />
-                        </>
+                        <div className="flex gap-2 mb-4">
+                            <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
+                            <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
+                        </div>
                     )}
                     
+                    <AdminSettingsWidget gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />
+
                     <h2 className="text-xl font-semibold mb-2">Players</h2>
                     <div className="space-y-2.5 mb-4">
                         {Object.values(gameState.players).map(p => (
