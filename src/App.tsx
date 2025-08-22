@@ -132,17 +132,17 @@ const countryData: Record<string, { cities: number[]; houseCost: number }> = {
 };
 
 const countryFlags: Record<string, ReactNode> = {
-    "India": ( <svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="900" height="200" fill="#FF9933"/><rect y="200" width="900" height="200" fill="#FFFFFF"/><rect y="400" width="900" height="200" fill="#138808"/></svg> ),
-    "China": ( <svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="900" height="600" fill="#EE1C25"/><path d="M150 120 l28.9 90.2h-75.8l58.8-69.1-22.9-81.1z" fill="#FFFF00" transform="scale(1.5) translate(-40 -30)"/></svg> ),
-    "Japan": ( <svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="900" height="600" fill="#FFFFFF"/><circle cx="450" cy="300" r="180" fill="#BC002D"/></svg> ),
-    "Germany": ( <svg viewBox="0 0 5 3" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="5" height="1" fill="#000000"/><rect y="1" width="5" height="1" fill="#DD0000"/><rect y="2" width="5" height="1" fill="#FFCE00"/></svg> ),
-    "Russia": ( <svg viewBox="0 0 9 6" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="9" height="2" fill="#FFFFFF"/><rect y="2" width="9" height="2" fill="#0039A6"/><rect y="4" width="9" height="2" fill="#D52B1E"/></svg> ),
-    "France": ( <svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="300" height="600" fill="#002395"/><rect x="300" width="300" height="600" fill="#FFFFFF"/><rect x="600" width="300" height="600" fill="#ED2939"/></svg> ),
-    "UK": ( <svg viewBox="0 0 2 1" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><path d="M0,0 H2 V1 H0z" fill="#00247d"/><path d="M1,.5 L0,0 M1,.5 L2,0 M1,.5 L0,1 M1,.5 L2,1" stroke="#fff" strokeWidth=".3"/><path d="M.85,.5 L0,0 M1.15,.5 L2,0 M.85,.5 L0,1 M1.15,.5 L2,1" stroke="#cf142b" strokeWidth=".2"/><path d="M0,.5 H2 M1,0 V1" stroke="#fff" strokeWidth=".5"/><path d="M0,.5 H2 M1,0 V1" stroke="#cf142b" strokeWidth=".3"/></svg> ),
-    "Canada": ( <svg viewBox="0 0 300 150" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="300" height="150" fill="#FFFFFF"/><rect width="75" height="150" fill="#FF0000"/><rect x="225" width="75" height="150" fill="#FF0000"/><path d="M150 90 L130 75 L140 70 L120 60 L130 55 L110 45 L130 40 L140 20 L150 35 L160 20 L170 40 L190 45 L170 55 L180 60 L160 70 L170 75z" fill="#FF0000"/></svg> ),
-    "Brazil": ( <svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="1000" height="700" fill="#009B3A"/><path d="M500 80 L880 350 L500 620 L120 350z" fill="#FFCC29"/><circle cx="500" cy="350" r="175" fill="#002776"/></svg> ),
-    "Australia": ( <svg viewBox="0 0 12 6" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="12" height="6" fill="#00008B"/><path d="M0,0 L6,3 M6,0 L0,3" stroke="#FFFFFF" strokeWidth="1.2"/><path d="M0,0 L6,3 M6,0 L0,3" stroke="#FF0000" strokeWidth="0.8"/><path d="M3,0 V3 M0,1.5 H6" stroke="#FFFFFF" strokeWidth="2"/><path d="M3,0 V3 M0,1.5 H6" stroke="#FF0000" strokeWidth="1.2"/></svg> ),
-    "USA": ( <svg viewBox="0 0 19 10" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"><rect width="19" height="10" fill="#B22234"/><rect y="1" width="19" height="1" fill="#FFFFFF"/><rect y="3" width="19" height="1" fill="#FFFFFF"/><rect y="5" width="19" height="1" fill="#FFFFFF"/><rect y="7" width="19" height="1" fill="#FFFFFF"/><rect y="9" width="19" height="1" fill="#FFFFFF"/><rect width="9.5" height="5" fill="#3C3B6E"/></svg> ),
+    "India": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/4/41/Flag_of_India.svg/125px-Flag_of_India.svg.png" alt="India Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "China": ( <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Flag_of_the_People%27s_Republic_of_China.svg/125px-Flag_of_the_People%27s_Republic_of_China.svg.png" alt="China Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Japan": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/9/9e/Flag_of_Japan.svg/125px-Flag_of_Japan.svg.png" alt="Japan Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Germany": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/b/ba/Flag_of_Germany.svg/125px-Flag_of_Germany.svg.png" alt="Germany Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Russia": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/f/f3/Flag_of_Russia.svg/125px-Flag_of_Russia.svg.png" alt="Russia Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "France": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/c/c3/Flag_of_France.svg/125px-Flag_of_France.svg.png" alt="France Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "UK": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/a/ae/Flag_of_the_United_Kingdom.svg/125px-Flag_of_the_United_Kingdom.svg.png" alt="UK Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Canada": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/c/cf/Flag_of_Canada.svg/125px-Flag_of_Canada.svg.png" alt="Canada Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Brazil": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/0/05/Flag_of_Brazil.svg/125px-Flag_of_Brazil.svg.png" alt="Brazil Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "Australia": ( <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Flag_of_Australia_%28converted%29.svg/125px-Flag_of_Australia_%28converted%29.svg.png" alt="Australia Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
+    "USA": ( <img src="https://upload.wikimedia.org/wikipedia/en/thumb/a/a4/Flag_of_the_United_States.svg/125px-Flag_of_the_United_States.svg.png" alt="USA Flag" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> ),
 };
 
 const initialBoardState: Record<string, BoardSquare> = {
@@ -1170,9 +1170,9 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
     const getGridPosition = (i: number): { gridArea: string } => {
         let row, col;
-        if (i >= 0 && i <= 14) { row = 15; col = 15 - i; } 
-        else if (i >= 15 && i <= 28) { row = 15 - (i - 14); col = 1; } 
-        else if (i >= 29 && i <= 42) { row = 1; col = 1 + (i - 28); } 
+        if (i >= 0 && i <= 14) { row = 15; col = 15 - i; }
+        else if (i >= 15 && i <= 28) { row = 15 - (i - 14); col = 1; }
+        else if (i >= 29 && i <= 42) { row = 1; col = 1 + (i - 28); }
         else { row = 1 + (i - 42); col = 15; }
         return { gridArea: `${row} / ${col}` };
     };
@@ -1264,12 +1264,12 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         return (
             <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
-                    {hasColorBar && <div className="w-full h-5 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
+                    {hasColorBar && <div className="w-full h-8 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
                     <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
                     
                     {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-sm font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
                     
-                    {ownerColor && <div className="w-full h-5 border-t border-gray-500" style={{ backgroundColor: ownerColor }}></div>}
+                    {ownerColor && <div className="w-full h-8 border-t border-gray-500" style={{ backgroundColor: ownerColor }}></div>}
                 </div>
                 {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">💲</div>}
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
