@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { FC, ReactNode } from 'react';
 import { db } from './firebase';
 import {
@@ -1198,10 +1198,35 @@ interface BoardProps {
     roomId: RoomId;
 }
 
-// ... (previous code in App.tsx)
-
 const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     const { players, board: boardState } = gameState;
+    const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
+    const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
+
+    const closePopup = (i: number) => {
+        setActivePopups(prev => ({ ...prev, [i]: false }));
+        if (popupTimers.current[i]) {
+            clearTimeout(popupTimers.current[i]);
+        }
+    };
+
+    const togglePopup = (i: number) => {
+        const isActive = !!activePopups[i];
+        if (isActive) {
+            closePopup(i);
+            return;
+        }
+
+        setActivePopups(prev => ({ ...prev, [i]: true }));
+
+        if (popupTimers.current[i]) {
+            clearTimeout(popupTimers.current[i]);
+        }
+        popupTimers.current[i] = setTimeout(() => {
+            closePopup(i);
+        }, 10000);
+    };
+
 
     const getGridPosition = (i: number): { gridArea: string } => {
         let row, col;
@@ -1297,7 +1322,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         }
 
         return (
-            <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+            <div key={i} onClick={() => togglePopup(i)} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
                     {hasColorBar && <div className="w-full h-8 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
                     <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
@@ -1313,7 +1338,12 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     )}
                 </div>
                 {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
-                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 hidden group-hover:flex flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
+                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[i] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
+                        <button onClick={(e) => { e.stopPropagation(); closePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                         <h4 className="font-bold mb-2 text-lg">{cellInfo.name}</h4>
                         {owner && <p className="text-xs mb-2">Owned by: {owner.name}</p>}
                         {cellInfo.type === 'city' && (
@@ -1382,8 +1412,6 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         </div>
     );
 };
-
-// ... (rest of the code in App.tsx)
 
 interface DeleteConfirmModalProps {
     onConfirm: () => void;
@@ -1751,6 +1779,9 @@ const AdminDashboard: FC = () => {
                 </button>
                 <button onClick={wipeAllGames} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded">
                     Wipe All Games
+                </button>
+                <button onClick={() => window.location.href = '/'} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                    Back to Lobby
                 </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
