@@ -81,6 +81,7 @@ interface GameState {
     auction: AuctionState;
     trades: Record<string, Trade>;
     winner?: PlayerId;
+    propertyVisits: Record<PropertyId, number>;
 }
 
 interface BaseSquare {
@@ -341,7 +342,8 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
     const gameRef = doc(db, "games", roomId);
 
     await updateDoc(gameRef, {
-        gameLog: arrayUnion(`${player.name} landed on ${square.name}.`)
+        gameLog: arrayUnion(`${player.name} landed on ${square.name}.`),
+        [`propertyVisits.${newPosition}`]: increment(1)
     });
 
     switch (square.type) {
@@ -721,7 +723,8 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             gameLog: [`Game created by ${playerName}.`],
             vacationPot: 0,
             auction: { active: false },
-            trades: {}
+            trades: {},
+            propertyVisits: {}
         };
         try {
             await setDoc(gameRef, newGame);
@@ -1128,7 +1131,7 @@ const StatsModal: FC<StatsModalProps> = ({ gameState, onClose }) => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
-                <h2 className="text-3xl font-bold mb-4 text-center">Game Statistics</h2>
+                <h2 className="text-3xl font-bold mb-4 text-center">Property Statistics</h2>
                 <div className="overflow-y-auto flex-grow pr-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {Object.values(gameState.players).map(player => {
@@ -1150,6 +1153,38 @@ const StatsModal: FC<StatsModalProps> = ({ gameState, onClose }) => {
                             );
                         })}
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface VisitStatsModalProps {
+    gameState: GameState;
+    onClose: () => void;
+}
+
+const VisitStatsModal: FC<VisitStatsModalProps> = ({ gameState, onClose }) => {
+    const sortedVisits = Object.entries(gameState.propertyVisits || {}).sort(([, a], [, b]) => b - a);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-xl w-full max-w-md h-3/4 relative flex flex-col">
+                <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                <h2 className="text-3xl font-bold mb-4 text-center">Property Visit Statistics</h2>
+                <div className="overflow-y-auto flex-grow pr-4">
+                    <ul className="space-y-2">
+                        {sortedVisits.map(([propId, count]) => (
+                            <li key={propId} className="flex justify-between items-center bg-gray-700 p-2 rounded">
+                                <span className="font-semibold">{initialBoardState[propId]?.name || 'Unknown Property'}</span>
+                                <span className="text-lg font-bold text-cyan-400">{count}</span>
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             </div>
         </div>
@@ -1387,6 +1422,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [lastProcessedLog, setLastProcessedLog] = useState("");
     const [hasRolled, setHasRolled] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
+    const [showVisitStatsModal, setShowVisitStatsModal] = useState(false);
 
 
     useEffect(() => {
@@ -1477,10 +1513,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         updates.gameLog = arrayUnion(...logMessages);
 
         await updateDoc(doc(db, "games", roomId), updates);
-
-        if (!isDoubles) {
-            setHasRolled(true);
-        }
+        setHasRolled(true);
     };
 
     const handleEndTurn = async () => {
@@ -1590,25 +1623,37 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     
                     <h2 className="text-xl font-semibold mb-2">Your Turn</h2>
                     {amIOnTurn && gameState.status === 'in-progress' && (
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        {!hasRolled && !me.onVacation && (
-                            <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll Dice</button>
-                        )}
-                         {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            {!hasRolled && !me.onVacation && (
+                                <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                    {me.doublesCount > 0 ? "Roll Again" : "Roll Dice"}
+                                </button>
+                            )}
+                            {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
 
-                        {(hasRolled || me.onVacation) && (
-                            <>
-                                {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
-                                {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
-                                <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
-                            </>
-                        )}
-                      </div>
+                            {hasRolled && !me.onVacation && (
+                                <>
+                                    {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
+                                    {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
+                                    
+                                    {me.doublesCount === 0 ? (
+                                        <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
+                                    ) : (
+                                        <button onClick={() => setHasRolled(false)} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Continue</button>
+                                    )}
+                                </>
+                            )}
+                            
+                            {me.onVacation && (
+                                <button onClick={handleEndTurn} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">End Turn</button>
+                            )}
+                        </div>
                     )}
                     <div className="grid grid-cols-2 gap-2 mb-4">
                         <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Declare Bankruptcy</button>
                         <button onClick={() => setActiveTradeModal('new')} disabled={gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
-                        <button onClick={() => setShowStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Game Stats</button>
+                        <button onClick={() => setShowStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Property Stats</button>
+                        <button onClick={() => setShowVisitStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Visit Stats</button>
                     </div>
 
                     {gameState.status === 'in-progress' && <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />}
@@ -1619,6 +1664,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />}
             {showDeleteConfirmModal && <DeleteConfirmModal onConfirm={confirmDeleteGame} onCancel={() => setShowDeleteConfirmModal(false)} />}
             {showStatsModal && <StatsModal gameState={gameState} onClose={() => setShowStatsModal(false)} />}
+            {showVisitStatsModal && <VisitStatsModal gameState={gameState} onClose={() => setShowVisitStatsModal(false)} />}
         </div>
     );
 };
