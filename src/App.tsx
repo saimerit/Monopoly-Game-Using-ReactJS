@@ -1544,7 +1544,12 @@ const CardPopup: FC<CardPopupProps> = ({ card, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
-            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 text-center shadow-xl w-96">
+            <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 text-center shadow-xl w-96 relative">
+                <button onClick={onClose} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none opacity-50">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
                 <h2 className="text-2xl font-bold mb-2">{card.type === 'treasure' ? 'Treasure Chest' : 'Surprise'}</h2>
                 <p>{card.text}</p>
             </div>
@@ -1589,6 +1594,16 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         else if (i >= 29 && i <= 42) { row = 1; col = 1 + (i - 28); }
         else { row = 1 + (i - 42); col = 15; }
         return { gridArea: `${row} / ${col}` };
+    };
+
+    const renderHouses = (houses: number, hotels: number) => {
+        if (hotels > 0) {
+            return '🏨';
+        }
+        if (houses > 0) {
+            return '🏠'.repeat(houses);
+        }
+        return null;
     };
 
     const cells = Array.from({ length: 56 }, (_, i) => {
@@ -1683,7 +1698,11 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     
                     {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-sm font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
                     
-                    {ownerColor && <div className="w-full h-8 border-t border-gray-500" style={{ backgroundColor: ownerColor }}></div>}
+                    {ownerColor && (
+                        <div className="w-full h-8 border-t border-gray-500 flex justify-center items-center" style={{ backgroundColor: ownerColor }}>
+                            <span className="text-xs">{renderHouses(cellState.houses, cellState.hotels)}</span>
+                        </div>
+                    )}
                 </div>
                 {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">💲</div>}
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
@@ -1911,21 +1930,27 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             alert("You must resolve your debt by selling houses or mortgaging properties before ending your turn.");
             return;
         }
-
-        const currentIndex = turnOrder.indexOf(currentPlayerTurn);
-        const nextPlayerId = turnOrder[(currentIndex + 1) % turnOrder.length];
-        
+    
         const updates: DocumentData = {
             [`players.${currentPlayerTurn}.doublesCount`]: 0,
-            currentPlayerTurn: nextPlayerId,
             gameLog: arrayUnion(`${player.name}'s turn ended.`)
         };
-
+    
+        if (turnOrder.length > 1) {
+            const currentIndex = turnOrder.indexOf(currentPlayerTurn);
+            const nextPlayerId = turnOrder[(currentIndex + 1) % turnOrder.length];
+            updates.currentPlayerTurn = nextPlayerId;
+        }
+    
         if (player.onVacation) {
             updates[`players.${currentPlayerTurn}.onVacation`] = false;
         }
         
         await updateDoc(doc(db, "games", roomId), updates);
+    
+        if (turnOrder.length === 1) {
+            setHasRolled(false);
+        }
     };
 
     const handleDeleteGame = () => {
