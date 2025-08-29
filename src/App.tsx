@@ -630,7 +630,7 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
             let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
             if (gameState.settings.taxInVacationPot) {
                 updates.vacationPot = increment(taxAmount);
-                logMessage += ` The money goes to the vacation pot.`
+                logMessage += ` The money goes to the vacation pot.`;
             }
             updates.gameLog = arrayUnion(logMessage);
             await updateDoc(gameRef, updates);
@@ -652,13 +652,19 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
 
         case 'treasure': {
             const card = treasureChestCards[Math.floor(Math.random() * treasureChestCards.length)];
-            await updateDoc(gameRef, { drawnCard: card });
+            await updateDoc(gameRef, {
+                drawnCard: card,
+                gameLog: arrayUnion(`${player.name} drew a Treasure Chest card: ${card.text}`)
+            });
             await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
             break;
         }
         case 'surprise': {
             const card = surpriseCards[Math.floor(Math.random() * surpriseCards.length)];
-            await updateDoc(gameRef, { drawnCard: card });
+            await updateDoc(gameRef, {
+                drawnCard: card,
+                gameLog: arrayUnion(`${player.name} drew a Surprise card: ${card.text}`)
+            });
             await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
             break;
         }
@@ -683,7 +689,8 @@ const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition:
     }
 
     const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
-    const ownershipArray = propertyTypeMap[property.type];
+    const ownershipArray = propertyTypeMap[property.type] as 'cities' | 'airports' | 'harbours' | 'companies';
+
 
     await updateDoc(doc(db, "games", roomId), {
         [`players.${playerId}.money`]: increment(-property.cost),
@@ -1099,7 +1106,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
 
     return (
         <div className="max-w-7xl mx-auto">
-            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 🌍</h1>
+            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 訣</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Actions */}
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1153,9 +1160,9 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         if (highestBidder && currentBid && propertyId) {
             const winner = gameState.players[highestBidder];
             const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
-            const ownershipArray = propertyTypeMap[property.type];
-            
-            updates[`players.${highestBidder}.money`] = winner.money - currentBid;
+            const ownershipArray = propertyTypeMap[property.type] as 'cities' | 'airports' | 'harbours' | 'companies';
+
+            updates[`players.${highestBidder}.money`] = increment(-currentBid);
             updates[`players.${highestBidder}.${ownershipArray}`] = arrayUnion(String(propertyId));
             updates[`board.${propertyId}.owner`] = highestBidder;
 
@@ -1164,7 +1171,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
                 const tax = currentBid - sellerGets;
                 updates[`players.${sellerId}.money`] = increment(sellerGets);
                 updates.vacationPot = increment(tax);
-                logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[sellerId].name} with a bid of $${currentBid}!`;
+                logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[sellerId]?.name || 'Unknown'} with a bid of $${currentBid}!`;
             } else {
                 logMessage = `${winner.name} won the auction for ${property.name} with a bid of $${currentBid}!`;
             }
@@ -1175,6 +1182,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         updates.gameLog = arrayUnion(logMessage);
         await updateDoc(doc(db, "games", roomId), updates);
     }, [auction, gameState.players, roomId, property]);
+
 
     useEffect(() => {
         setTimer(5);
@@ -1274,7 +1282,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
 
     const handleAcceptTrade = async () => {
         if (!trade) return;
-        
+
         const gameRef = doc(db, "games", roomId);
         await runTransaction(db, async (transaction: Transaction) => {
             const gameDoc = await transaction.get(gameRef);
@@ -1286,16 +1294,32 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
 
             fromPlayer.money = fromPlayer.money - trade.offer.money + trade.request.money;
             toPlayer.money = toPlayer.money + trade.offer.money - trade.request.money;
-            
+
+            const propertyTypeMap: Record<string, 'cities' | 'airports' | 'harbours' | 'companies'> = {
+                'city': 'cities',
+                'airport': 'airports',
+                'harbour': 'harbours',
+                'company': 'companies'
+            };
+
             trade.offer.properties.forEach(propId => {
-                fromPlayer.cities = fromPlayer.cities.filter(p => p !== propId);
-                toPlayer.cities.push(propId);
-                gameData.board[propId].owner = toPlayer.id;
+                const propertyType = initialBoardState[propId]?.type;
+                if (propertyType && propertyTypeMap[propertyType]) {
+                    const propArray = propertyTypeMap[propertyType];
+                    fromPlayer[propArray] = fromPlayer[propArray].filter(p => p !== propId);
+                    toPlayer[propArray].push(propId);
+                    gameData.board[propId].owner = toPlayer.id;
+                }
             });
+
             trade.request.properties.forEach(propId => {
-                toPlayer.cities = toPlayer.cities.filter(p => p !== propId);
-                fromPlayer.cities.push(propId);
-                gameData.board[propId].owner = fromPlayer.id;
+                const propertyType = initialBoardState[propId]?.type;
+                if (propertyType && propertyTypeMap[propertyType]) {
+                    const propArray = propertyTypeMap[propertyType];
+                    toPlayer[propArray] = toPlayer[propArray].filter(p => p !== propId);
+                    fromPlayer[propArray].push(propId);
+                    gameData.board[propId].owner = fromPlayer.id;
+                }
             });
 
             transaction.update(gameRef, {
@@ -1308,6 +1332,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
 
         setShowTradeModal(null);
     };
+
 
     const handleRejectTrade = async () => {
         if (!trade) return;
@@ -1335,14 +1360,14 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Offer</h3>
                                 <p>Money: ${trade.offer.money}</p>
                                 <ul className="list-disc list-inside mt-2">
-                                    {trade.offer.properties.map(p => <li key={p}>{initialBoardState[p].name}</li>)}
+                                    {trade.offer.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
                             </div>
                             <div className="flex-1 border border-gray-600 p-4 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Request</h3>
                                 <p>Money: ${trade.request.money}</p>
                                 <ul className="list-disc list-inside mt-2">
-                                    {trade.request.properties.map(p => <li key={p}>{initialBoardState[p].name}</li>)}
+                                    {trade.request.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
                             </div>
                         </div>
@@ -1372,7 +1397,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                                 <input type="checkbox" className="form-checkbox" onChange={(e) => {
                                                     const newProps = e.target.checked ? [...offer.properties, propId] : offer.properties.filter(p => p !== propId);
                                                     setOffer({...offer, properties: newProps});
-                                                }}/> <span>{initialBoardState[propId].name}</span>
+                                                }}/> <span>{initialBoardState[propId]?.name || 'Unknown Property'}</span>
                                             </label>
                                         ))}
                                     </div>
@@ -1387,7 +1412,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                                 <input type="checkbox" className="form-checkbox" onChange={(e) => {
                                                     const newProps = e.target.checked ? [...request.properties, propId] : request.properties.filter(p => p !== propId);
                                                     setRequest({...request, properties: newProps});
-                                                }}/> <span>{initialBoardState[propId].name}</span>
+                                                }}/> <span>{initialBoardState[propId]?.name || 'Unknown Property'}</span>
                                             </label>
                                         ))}
                                     </div>
@@ -1598,10 +1623,10 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
     const renderHouses = (houses: number, hotels: number) => {
         if (hotels > 0) {
-            return '🏨';
+            return '妾';
         }
         if (houses > 0) {
-            return '🏠'.repeat(houses);
+            return '匠'.repeat(houses);
         }
         return null;
     };
@@ -1704,7 +1729,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         </div>
                     )}
                 </div>
-                {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">💲</div>}
+                {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">調</div>}
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
                     {Object.values(players).map(p => 
                         p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
@@ -1820,7 +1845,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [activeTradeModal, setActiveTradeModal] = useState<string | null>(null);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-    const [lastProcessedLog, setLastProcessedLog] = useState("");
     const [hasRolled, setHasRolled] = useState(false);
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [showVisitStatsModal, setShowVisitStatsModal] = useState(false);
@@ -1841,22 +1865,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         });
         return () => unsubscribe();
     }, [roomId]);
-
-    useEffect(() => {
-        if (!gameState || gameState.status !== 'in-progress' || !gameState.gameLog.length) return;
-
-        const lastLog = gameState.gameLog[gameState.gameLog.length - 1];
-        if (lastLog && lastLog !== lastProcessedLog && lastLog.includes(" rolled a ")) {
-            setLastProcessedLog(lastLog);
-            
-            const actingPlayerId = gameState.currentPlayerTurn;
-            const actingPlayer = gameState.players[actingPlayerId];
-            const match = lastLog.match(/rolled a (\d+)/);
-            const diceRoll = match ? parseInt(match[1], 10) : 0;
-
-            handleLandingOnSquare(roomId, actingPlayerId, actingPlayer.position, diceRoll, gameState);
-        }
-    }, [gameState, roomId, lastProcessedLog]);
     
     useEffect(() => {
         setHasRolled(false);
@@ -1878,46 +1886,54 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const handleRollDice = async () => {
         if (!gameState || gameState.currentPlayerTurn !== currentPlayerId) return alert("It's not your turn!");
         const player = gameState.players[currentPlayerId];
-
+    
         if (player.onVacation) {
             alert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
             return;
         }
-
+    
         let doublesCount = player.doublesCount || 0;
-
+    
         const die1 = Math.floor(Math.random() * 6) + 1;
         const die2 = Math.floor(Math.random() * 6) + 1;
         const diceRoll = die1 + die2;
         const isDoubles = die1 === die2;
-
+    
         if (isDoubles) doublesCount++;
         else doublesCount = 0;
-
+    
         if (doublesCount === 3) {
             await goToJail(roomId, currentPlayerId, gameState);
             setHasRolled(true); // End movement phase after going to jail
             return;
         }
-
+    
         const oldPosition = player.position;
         const newPosition = (oldPosition + diceRoll) % 56;
+    
         const updates: DocumentData = {
             [`players.${currentPlayerId}.position`]: newPosition,
             [`players.${currentPlayerId}.doublesCount`]: doublesCount,
         };
         
         const logMessages = [`${player.name} rolled a ${diceRoll}${isDoubles ? ' (doubles!)' : ''}.`];
-
+    
         if (newPosition < oldPosition && newPosition !== 0 && !player.inJail) {
-            const amount = 200;
-            updates[`players.${currentPlayerId}.money`] = increment(amount);
-            logMessages.push(`${player.name} passed GO and collected $${amount}.`);
+            updates[`players.${currentPlayerId}.money`] = increment(200);
+            logMessages.push(`${player.name} passed GO and collected $200.`);
         }
         
         updates.gameLog = arrayUnion(...logMessages);
-
+    
         await updateDoc(doc(db, "games", roomId), updates);
+        
+        // Fetch the updated game state to pass to handleLandingOnSquare
+        const updatedGameDoc = await getDoc(doc(db, "games", roomId));
+        if (updatedGameDoc.exists()) {
+            const updatedGameState = updatedGameDoc.data() as GameState;
+            await handleLandingOnSquare(roomId, currentPlayerId, newPosition, diceRoll, updatedGameState);
+        }
+    
         setHasRolled(true);
     };
 
