@@ -203,7 +203,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     37: { name: "Mumbai", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Delhi", type: "city", country: "India", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
-    40: { name: "Luxury Tax", type: "tax", amount: 100 },
+    40: { name: "Luxury Tax $75", type: "tax", amount: 100 },
     41: { name: "Hyderabad", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     42: { name: "Go to Jail", type: "go-to-jail-square" },
     43: { name: "London", type: "city", country: "UK", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
@@ -292,7 +292,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
         case 'TC01': await updateDoc(gameRef, { [`players.${playerId}.getOutOfJailFreeCards`]: increment(1) }); break;
         case 'TC02': await updateDoc(gameRef, { [`players.${playerId}.position`]: 0, [`players.${playerId}.money`]: increment(300) }); break;
         case 'TC03': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) }); break;
-        case 'TC04': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-50) }); break;
+        case 'TC04': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-50), vacationPot: increment(50) }); break;
         case 'TC05': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(50) }); break;
         case 'TC06': await goToJail(roomId, playerId, gameState); break;
         case 'TC07': {
@@ -320,24 +320,24 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             break;
         }
         case 'TC11': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
-        case 'TC12': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-100) }); break;
-        case 'TC13': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-150) }); break;
+        case 'TC12': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-100), vacationPot: increment(100) }); break;
+        case 'TC13': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-150), vacationPot: increment(150) }); break;
         case 'TC14': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(25) }); break;
         case 'TC15': {
             const streetRepairsCost = (player.houses * 40) + (player.hotels * 115);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-streetRepairsCost) });
+            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-streetRepairsCost), vacationPot: increment(streetRepairsCost) });
             break;
         }
         case 'TC16': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(10) }); break;
         case 'TC17': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
         case 'TC18': {
             const renovationCost = player.houses * 120;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-renovationCost) });
+            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-renovationCost), vacationPot: increment(renovationCost) });
             break;
         }
         case 'TC19': {
             const propertyTaxes = (player.houses * 50) + (player.hotels * 125);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-propertyTaxes) });
+            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-propertyTaxes), vacationPot: increment(propertyTaxes) });
             break;
         }
         case 'TC20': {
@@ -395,14 +395,23 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
         }
         case 'S04': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(50) }); break;
         case 'S05': await updateDoc(gameRef, { [`players.${playerId}.getOutOfJailFreeCards`]: increment(1) }); break;
-        case 'S06': await updateDoc(gameRef, { [`players.${playerId}.position`]: player.position - 3 }); break;
+        case 'S06': {
+            const newPosition = (player.position - 3 + 56) % 56;
+            await updateDoc(gameRef, { [`players.${playerId}.position`]: newPosition });
+            const updatedGameDoc = await getDoc(gameRef);
+            if (updatedGameDoc.exists()) {
+                const updatedGameState = updatedGameDoc.data() as GameState;
+                await handleLandingOnSquare(roomId, playerId, newPosition, 0, updatedGameState);
+            }
+            break;
+        }
         case 'S07': await goToJail(roomId, playerId, gameState); break;
         case 'S08': {
             const generalRepairsCost = (player.houses * 25) + (player.hotels * 100);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-generalRepairsCost) });
+            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-generalRepairsCost), vacationPot: increment(generalRepairsCost) });
             break;
         }
-        case 'S09': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-15) }); break;
+        case 'S09': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-15), vacationPot: increment(15) }); break;
         case 'S10': {
             const toAirport1 = 5;
             if (player.position > toAirport1) {
@@ -436,7 +445,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
         }
         case 'S16': {
             const beautificationAssessment = player.houses * 30;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-beautificationAssessment) });
+            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-beautificationAssessment), vacationPot: increment(beautificationAssessment) });
             break;
         }
         case 'S17': {
@@ -596,80 +605,75 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
 const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosition: number, diceRoll: number, gameState: GameState) => {
     const square = initialBoardState[newPosition];
     if (!square) return;
-
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
-
     await updateDoc(gameRef, {
-        gameLog: arrayUnion(`${player.name} landed on ${square.name}.`),
-        [`propertyVisits.${newPosition}`]: increment(1)
+    gameLog: arrayUnion(`${player.name} landed on ${square.name}.`),
+    [`propertyVisits.${newPosition}`]: increment(1)
     });
-
     switch (square.type) {
-        case 'go': {
-            await updateDoc(gameRef, {
-                [`players.${playerId}.money`]: increment(300),
-                gameLog: arrayUnion(`${player.name} landed on GO and collected $300.`)
-            });
-            break;
-        }
-        case 'city':
-        case 'airport':
-        case 'harbour':
-        case 'company':
-            if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
-                await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
-            }
-            break;
-        case 'tax': {
-            const taxSquare = square as TaxSquare;
-            const taxAmount = taxSquare.amount < 1 ? Math.floor(player.money * taxSquare.amount) : taxSquare.amount;
-            const updates: DocumentData = {
-                [`players.${playerId}.money`]: increment(-taxAmount),
-            };
-            let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
-            if (gameState.settings.taxInVacationPot) {
-                updates.vacationPot = increment(taxAmount);
-                logMessage += ` The money goes to the vacation pot.`;
-            }
-            updates.gameLog = arrayUnion(logMessage);
-            await updateDoc(gameRef, updates);
-            break;
-        }
-        case 'vacation': {
-            const pot = gameState.vacationPot || 0;
-            await updateDoc(gameRef, {
-                [`players.${playerId}.money`]: increment(pot),
-                [`players.${playerId}.onVacation`]: true,
-                vacationPot: 0,
-                gameLog: arrayUnion(`${player.name} collected $${pot} from the vacation pot! They will skip their next turn.`)
-            });
-            break;
-        }
-        case 'go-to-jail-square':
-            await goToJail(roomId, playerId, gameState);
-            break;
-
-        case 'treasure': {
-            const card = treasureChestCards[Math.floor(Math.random() * treasureChestCards.length)];
-            await updateDoc(gameRef, {
-                drawnCard: card,
-                gameLog: arrayUnion(`${player.name} drew a Treasure Chest card: ${card.text}`)
-            });
-            await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
-            break;
-        }
-        case 'surprise': {
-            const card = surpriseCards[Math.floor(Math.random() * surpriseCards.length)];
-            await updateDoc(gameRef, {
-                drawnCard: card,
-                gameLog: arrayUnion(`${player.name} drew a Surprise card: ${card.text}`)
-            });
-            await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
-            break;
-        }
+    case 'go':
+    await updateDoc(gameRef, {
+    [`players.${playerId}.money`]: increment(300),
+    gameLog: arrayUnion(`${player.name} landed on GO and collected $300.`)
+    });
+    break;
+    case 'city':
+    case 'airport':
+    case 'harbour':
+    case 'company':
+    if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
+    await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
     }
-};
+    break;
+    case 'tax': {
+    const taxSquare = square as TaxSquare;
+    const taxAmount = taxSquare.amount < 1 ? Math.floor(player.money * taxSquare.amount) : taxSquare.amount;
+    const updates: DocumentData = {
+    [`players.${playerId}.money`]: increment(-taxAmount),
+    };
+    let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
+    if (gameState.settings.taxInVacationPot) {
+    updates.vacationPot = increment(taxAmount);
+    logMessage += ` The money goes to the vacation pot.`;
+    }
+    updates.gameLog = arrayUnion(logMessage);
+    await updateDoc(gameRef, updates);
+    break;
+    }
+    case 'vacation': {
+    const pot = gameState.vacationPot || 0;
+    await updateDoc(gameRef, {
+    [`players.${playerId}.money`]: increment(pot),
+    [`players.${playerId}.onVacation`]: true,
+    vacationPot: 0,
+    gameLog: arrayUnion(`${player.name} collected $${pot} from the vacation pot! They will skip their next turn.`)
+    });
+    break;
+    }
+    case 'go-to-jail-square':
+    await goToJail(roomId, playerId, gameState);
+    break;
+    case 'treasure': {
+    const card = treasureChestCards[Math.floor(Math.random() * treasureChestCards.length)];
+    await updateDoc(gameRef, {
+        drawnCard: card,
+        gameLog: arrayUnion(`${player.name} drew a Treasure Chest card: ${card.text}`)
+    });
+    await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
+    break;
+}
+case 'surprise': {
+    const card = surpriseCards[Math.floor(Math.random() * surpriseCards.length)];
+    await updateDoc(gameRef, {
+        drawnCard: card,
+        gameLog: arrayUnion(`${player.name} drew a Surprise card: ${card.text}`)
+    });
+    await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
+    break;
+}
+    }
+    };
 
 const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
     await updateDoc(doc(db, "games", roomId), {
@@ -1563,7 +1567,7 @@ interface CardPopupProps {
 }
 const CardPopup: FC<CardPopupProps> = ({ card, onClose }) => {
     useEffect(() => {
-        const timer = setTimeout(onClose, 10000);
+        const timer = setTimeout(onClose, 20000);
         return () => clearTimeout(timer);
     }, [onClose]);
 
@@ -1587,28 +1591,25 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
     const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
-    const closePopup = (i: number) => {
-        setActivePopups(prev => ({ ...prev, [i]: false }));
-        if (popupTimers.current[i]) {
-            clearTimeout(popupTimers.current[i]);
-        }
-    };
-
     const togglePopup = (i: number) => {
-        const isActive = !!activePopups[i];
-        if (isActive) {
-            closePopup(i);
-            return;
-        }
-
-        setActivePopups(prev => ({ ...prev, [i]: true }));
-
-        if (popupTimers.current[i]) {
-            clearTimeout(popupTimers.current[i]);
-        }
-        popupTimers.current[i] = setTimeout(() => {
-            closePopup(i);
-        }, 10000);
+        // Clear any existing timers
+        Object.values(popupTimers.current).forEach(clearTimeout);
+        popupTimers.current = {};
+    
+        // If the clicked popup is already active, close all popups.
+        // Otherwise, open the clicked one.
+        setActivePopups(prev => {
+            const isActive = !!prev[i];
+            if (isActive) {
+                return {};
+            } else {
+                const newActivePopups = { [i]: true };
+                popupTimers.current[i] = setTimeout(() => {
+                    setActivePopups({});
+                }, 10000);
+                return newActivePopups;
+            }
+        });
     };
 
 
@@ -1737,7 +1738,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                 </div>
                 {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
                     <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[i] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
-                        <button onClick={(e) => { e.stopPropagation(); closePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
+                        <button onClick={(e) => { e.stopPropagation(); togglePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
