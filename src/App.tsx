@@ -203,7 +203,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     37: { name: "Mumbai", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Delhi", type: "city", country: "India", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
-    40: { name: "Luxury Tax", type: "tax", amount: 100 },
+    40: { name: "Luxury Tax $75", type: "tax", amount: 100 },
     41: { name: "Hyderabad", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     42: { name: "Go to Jail", type: "go-to-jail-square" },
     43: { name: "London", type: "city", country: "UK", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
@@ -214,7 +214,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     48: { name: "Glasgow", type: "city", country: "UK", cost: 425, rent: [55, 225, 650, 1500, 1800, 2100] },
     49: { name: "Sydney", type: "city", country: "Australia", cost: 450, rent: [60, 250, 700, 1600, 1900, 2200] },
     50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [4, 10] },
-    51: { name: "Melbourne", type: "city", country: "Australia", cost: 475, rent: [65, 275, 750, 1700, 2000, 2400] },
+    51: { name: "Melbourne", type: "city", country: "Australia", cost: 475, rent: [65, 275, 750, 2000, 2400] },
     52: { name: "Canberra", type: "city", country: "Australia", cost: 500, rent: [70, 300, 800, 1800, 2100, 2500] },
     53: { name: "New York", type: "city", country: "USA", cost: 550, rent: [75, 325, 850, 1900, 2200, 2600] },
     54: { name: "Los Angeles", type: "city", country: "USA", cost: 550, rent: [75, 325, 850, 1900, 2200, 2600] },
@@ -286,82 +286,98 @@ const surpriseCards: Omit<Card, 'action'>[] = [
 const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: GameState, card: Card) => {
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
+    const updates: DocumentData = { [`players.${playerId}.money`]: increment(0) };
+    let moneyToPot = 0;
+    let updatesApplied = false;
 
     switch (card.id) {
         // Treasure Chest Cards
-        case 'TC01': await updateDoc(gameRef, { [`players.${playerId}.getOutOfJailFreeCards`]: increment(1) }); break;
-        case 'TC02': await updateDoc(gameRef, { [`players.${playerId}.position`]: 0, [`players.${playerId}.money`]: increment(300) }); break;
-        case 'TC03': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) }); break;
-        case 'TC04': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-50) }); break;
-        case 'TC05': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(50) }); break;
-        case 'TC06': await goToJail(roomId, playerId, gameState); break;
+        case 'TC01': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
+        case 'TC02': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
+        case 'TC03': updates[`players.${playerId}.money`] = increment(200); updatesApplied = true; break;
+        case 'TC04': updates[`players.${playerId}.money`] = increment(-50); moneyToPot = 50; updatesApplied = true; break;
+        case 'TC05': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
+        case 'TC06': await goToJail(roomId, playerId, gameState); return;
         case 'TC07': {
-            const updates: DocumentData = {};
+            const batch = writeBatch(db);
+            const gameRef = doc(db, "games", roomId);
             Object.keys(gameState.players).forEach(pId => {
                 if (pId !== playerId) {
-                    updates[`players.${pId}.money`] = increment(-50);
+                    batch.update(gameRef, { [`players.${pId}.money`]: increment(-50) });
                 }
             });
-            updates[`players.${playerId}.money`] = increment(50 * (Object.keys(gameState.players).length - 1));
-            await updateDoc(gameRef, updates);
-            break;
+            batch.update(gameRef, { [`players.${playerId}.money`]: increment(50 * (Object.keys(gameState.players).length - 1)) });
+            await batch.commit();
+            return;
         }
-        case 'TC08': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
-        case 'TC09': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(20) }); break;
+        case 'TC08': updates[`players.${playerId}.money`] = increment(100); updatesApplied = true; break;
+        case 'TC09': updates[`players.${playerId}.money`] = increment(20); updatesApplied = true; break;
         case 'TC10': {
-            const updates: DocumentData = {};
+            const batch = writeBatch(db);
+            const gameRef = doc(db, "games", roomId);
             Object.keys(gameState.players).forEach(pId => {
                 if (pId !== playerId) {
-                    updates[`players.${pId}.money`] = increment(-10);
+                    batch.update(gameRef, { [`players.${pId}.money`]: increment(-10) });
                 }
             });
-            updates[`players.${playerId}.money`] = increment(10 * (Object.keys(gameState.players).length - 1));
-            await updateDoc(gameRef, updates);
-            break;
+            batch.update(gameRef, { [`players.${playerId}.money`]: increment(10 * (Object.keys(gameState.players).length - 1)) });
+            await batch.commit();
+            return;
         }
-        case 'TC11': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
-        case 'TC12': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-100) }); break;
-        case 'TC13': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-150) }); break;
-        case 'TC14': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(25) }); break;
+        case 'TC11': updates[`players.${playerId}.money`] = increment(100); updatesApplied = true; break;
+        case 'TC12': updates[`players.${playerId}.money`] = increment(-100); moneyToPot = 100; updatesApplied = true; break;
+        case 'TC13': updates[`players.${playerId}.money`] = increment(-150); moneyToPot = 150; updatesApplied = true; break;
+        case 'TC14': updates[`players.${playerId}.money`] = increment(25); updatesApplied = true; break;
         case 'TC15': {
             const streetRepairsCost = (player.houses * 40) + (player.hotels * 115);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-streetRepairsCost) });
+            updates[`players.${playerId}.money`] = increment(-streetRepairsCost);
+            moneyToPot = streetRepairsCost;
+            updatesApplied = true;
             break;
         }
-        case 'TC16': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(10) }); break;
-        case 'TC17': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
+        case 'TC16': updates[`players.${playerId}.money`] = increment(10); updatesApplied = true; break;
+        case 'TC17': updates[`players.${playerId}.money`] = increment(100); updatesApplied = true; break;
         case 'TC18': {
             const renovationCost = player.houses * 120;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-renovationCost) });
+            updates[`players.${playerId}.money`] = increment(-renovationCost);
+            moneyToPot = renovationCost;
+            updatesApplied = true;
             break;
         }
         case 'TC19': {
             const propertyTaxes = (player.houses * 50) + (player.hotels * 125);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-propertyTaxes) });
+            updates[`players.${playerId}.money`] = increment(-propertyTaxes);
+            moneyToPot = propertyTaxes;
+            updatesApplied = true;
             break;
         }
         case 'TC20': {
             const gardeningWinnings = player.houses * 20;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(gardeningWinnings) });
+            updates[`players.${playerId}.money`] = increment(gardeningWinnings);
+            updatesApplied = true;
             break;
         }
         case 'TC21': {
             const pot = gameState.vacationPot || 0;
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: 28, [`players.${playerId}.money`]: increment(pot), vacationPot: 0 });
+            updates[`players.${playerId}.position`] = 28;
+            updates[`players.${playerId}.money`] = increment(pot);
+            updates.vacationPot = 0;
+            updatesApplied = true;
             break;
         }
-        case 'TC22': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
-        case 'TC23': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(150) }); break;
+        case 'TC22': updates[`players.${playerId}.money`] = increment(100); updatesApplied = true; break;
+        case 'TC23': updates[`players.${playerId}.money`] = increment(150); updatesApplied = true; break;
         case 'TC24': {
             const toLondon = 43;
             if (player.position > toLondon) {
-                await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) });
+                updates[`players.${playerId}.money`] = increment(200);
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: toLondon });
+            updates[`players.${playerId}.position`] = toLondon;
+            updatesApplied = true;
             break;
         }
         // Surprise Cards
-        case 'S01': await updateDoc(gameRef, { [`players.${playerId}.position`]: 0, [`players.${playerId}.money`]: increment(300) }); break;
+        case 'S01': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
         case 'S02': {
             const airports = [5, 16, 31, 45];
             let nearestAirport = airports[0];
@@ -374,8 +390,8 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
                     nearestAirport = airport;
                 }
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: nearestAirport });
-            // The logic to buy or pay rent is handled in handleLandingOnSquare
+            updates[`players.${playerId}.position`] = nearestAirport;
+            updatesApplied = true;
             break;
         }
         case 'S03': {
@@ -390,82 +406,108 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
                     nearestUtility = utility;
                 }
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: nearestUtility });
+            updates[`players.${playerId}.position`] = nearestUtility;
+            updatesApplied = true;
             break;
         }
-        case 'S04': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(50) }); break;
-        case 'S05': await updateDoc(gameRef, { [`players.${playerId}.getOutOfJailFreeCards`]: increment(1) }); break;
-        case 'S06': await updateDoc(gameRef, { [`players.${playerId}.position`]: player.position - 3 }); break;
-        case 'S07': await goToJail(roomId, playerId, gameState); break;
+        case 'S04': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
+        case 'S05': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
+        case 'S06': {
+            const newPosition = (player.position - 3 + 56) % 56;
+            updates[`players.${playerId}.position`] = newPosition;
+            updatesApplied = true;
+            await updateDoc(gameRef, updates);
+            const updatedGameDoc = await getDoc(gameRef);
+            if (updatedGameDoc.exists()) {
+                const updatedGameState = updatedGameDoc.data() as GameState;
+                await handleLandingOnSquare(roomId, playerId, newPosition, 0, updatedGameState);
+            }
+            return;
+        }
+        case 'S07': await goToJail(roomId, playerId, gameState); return;
         case 'S08': {
             const generalRepairsCost = (player.houses * 25) + (player.hotels * 100);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-generalRepairsCost) });
+            updates[`players.${playerId}.money`] = increment(-generalRepairsCost);
+            moneyToPot = generalRepairsCost;
+            updatesApplied = true;
             break;
         }
-        case 'S09': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-15) }); break;
+        case 'S09': updates[`players.${playerId}.money`] = increment(-15); moneyToPot = 15; updatesApplied = true; break;
         case 'S10': {
             const toAirport1 = 5;
             if (player.position > toAirport1) {
-                await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) });
+                updates[`players.${playerId}.money`] = increment(200);
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: toAirport1 });
+            updates[`players.${playerId}.position`] = toAirport1;
+            updatesApplied = true;
             break;
         }
         case 'S11': {
-            const updates: DocumentData = {};
+            const batch = writeBatch(db);
+            const gameRef = doc(db, "games", roomId);
             Object.keys(gameState.players).forEach(pId => {
                 if (pId !== playerId) {
-                    updates[`players.${pId}.money`] = increment(50);
+                    batch.update(gameRef, { [`players.${pId}.money`]: increment(50) });
                 }
             });
-            updates[`players.${playerId}.money`] = increment(-50 * (Object.keys(gameState.players).length - 1));
-            await updateDoc(gameRef, updates);
-            break;
+            batch.update(gameRef, { [`players.${playerId}.money`]: increment(-50 * (Object.keys(gameState.players).length - 1)) });
+            await batch.commit();
+            return;
         }
-        case 'S12': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(150) }); break;
-        case 'S13': await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(100) }); break;
+        case 'S12': updates[`players.${playerId}.money`] = increment(150); updatesApplied = true; break;
+        case 'S13': updates[`players.${playerId}.money`] = increment(100); updatesApplied = true; break;
         case 'S14': {
             const loanMatures = player.houses * 75;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(loanMatures) });
+            updates[`players.${playerId}.money`] = increment(loanMatures);
+            updatesApplied = true;
             break;
         }
         case 'S15': {
             const zoningBenefit = (player.houses * 30) + (player.hotels * 100);
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(zoningBenefit) });
+            updates[`players.${playerId}.money`] = increment(zoningBenefit);
+            updatesApplied = true;
             break;
         }
         case 'S16': {
             const beautificationAssessment = player.houses * 30;
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(-beautificationAssessment) });
+            updates[`players.${playerId}.money`] = increment(-beautificationAssessment);
+            moneyToPot = beautificationAssessment;
+            updatesApplied = true;
             break;
         }
         case 'S17': {
             const toNewYork = 53;
             const pot = gameState.vacationPot || 0;
             if (player.position > toNewYork) {
-                await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) });
+                updates[`players.${playerId}.money`] = increment(200);
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: 28 });
-            await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(pot), vacationPot: 0 });
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: toNewYork });
+            updates[`players.${playerId}.position`] = toNewYork;
+            updates[`players.${playerId}.money`] = increment(pot);
+            updates.vacationPot = 0;
+            updatesApplied = true;
             break;
         }
-        case 'S18': await updateDoc(gameRef, { vacationPot: increment(100) }); break;
-        case 'S19': {
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: 28 });
-            // End turn logic will be handled elsewhere
-            break;
-        }
+        case 'S18': moneyToPot = 100; updatesApplied = true; break;
+        case 'S19': updates[`players.${playerId}.position`] = 28; updatesApplied = true; break;
         case 'S20': {
             const toTokyo = 33;
             if (player.position > toTokyo) {
-                await updateDoc(gameRef, { [`players.${playerId}.money`]: increment(200) });
+                updates[`players.${playerId}.money`] = increment(200);
             }
-            await updateDoc(gameRef, { [`players.${playerId}.position`]: toTokyo });
+            updates[`players.${playerId}.position`] = toTokyo;
+            updatesApplied = true;
             break;
         }
     }
+
+    if (updatesApplied) {
+        if (moneyToPot > 0 && gameState.settings.taxInVacationPot) {
+            updates.vacationPot = increment(moneyToPot);
+        }
+        await updateDoc(gameRef, updates);
+    }
 };
+
 const handleBankruptcy = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
@@ -596,80 +638,75 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
 const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosition: number, diceRoll: number, gameState: GameState) => {
     const square = initialBoardState[newPosition];
     if (!square) return;
-
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
-
     await updateDoc(gameRef, {
-        gameLog: arrayUnion(`${player.name} landed on ${square.name}.`),
-        [`propertyVisits.${newPosition}`]: increment(1)
+    gameLog: arrayUnion(`${player.name} landed on ${square.name}.`),
+    [`propertyVisits.${newPosition}`]: increment(1)
     });
-
     switch (square.type) {
-        case 'go': {
-            await updateDoc(gameRef, {
-                [`players.${playerId}.money`]: increment(300),
-                gameLog: arrayUnion(`${player.name} landed on GO and collected $300.`)
-            });
-            break;
-        }
-        case 'city':
-        case 'airport':
-        case 'harbour':
-        case 'company':
-            if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
-                await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
-            }
-            break;
-        case 'tax': {
-            const taxSquare = square as TaxSquare;
-            const taxAmount = taxSquare.amount < 1 ? Math.floor(player.money * taxSquare.amount) : taxSquare.amount;
-            const updates: DocumentData = {
-                [`players.${playerId}.money`]: increment(-taxAmount),
-            };
-            let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
-            if (gameState.settings.taxInVacationPot) {
-                updates.vacationPot = increment(taxAmount);
-                logMessage += ` The money goes to the vacation pot.`;
-            }
-            updates.gameLog = arrayUnion(logMessage);
-            await updateDoc(gameRef, updates);
-            break;
-        }
-        case 'vacation': {
-            const pot = gameState.vacationPot || 0;
-            await updateDoc(gameRef, {
-                [`players.${playerId}.money`]: increment(pot),
-                [`players.${playerId}.onVacation`]: true,
-                vacationPot: 0,
-                gameLog: arrayUnion(`${player.name} collected $${pot} from the vacation pot! They will skip their next turn.`)
-            });
-            break;
-        }
-        case 'go-to-jail-square':
-            await goToJail(roomId, playerId, gameState);
-            break;
-
-        case 'treasure': {
-            const card = treasureChestCards[Math.floor(Math.random() * treasureChestCards.length)];
-            await updateDoc(gameRef, {
-                drawnCard: card,
-                gameLog: arrayUnion(`${player.name} drew a Treasure Chest card: ${card.text}`)
-            });
-            await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
-            break;
-        }
-        case 'surprise': {
-            const card = surpriseCards[Math.floor(Math.random() * surpriseCards.length)];
-            await updateDoc(gameRef, {
-                drawnCard: card,
-                gameLog: arrayUnion(`${player.name} drew a Surprise card: ${card.text}`)
-            });
-            await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
-            break;
-        }
+    case 'go':
+    await updateDoc(gameRef, {
+    [`players.${playerId}.money`]: increment(300),
+    gameLog: arrayUnion(`${player.name} landed on GO and collected $300.`)
+    });
+    break;
+    case 'city':
+    case 'airport':
+    case 'harbour':
+    case 'company':
+    if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
+    await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
     }
-};
+    break;
+    case 'tax': {
+    const taxSquare = square as TaxSquare;
+    const taxAmount = taxSquare.amount < 1 ? Math.floor(player.money * taxSquare.amount) : taxSquare.amount;
+    const updates: DocumentData = {
+    [`players.${playerId}.money`]: increment(-taxAmount),
+    };
+    let logMessage = `${player.name} paid $${taxAmount} for ${taxSquare.name}.`;
+    if (gameState.settings.taxInVacationPot) {
+    updates.vacationPot = increment(taxAmount);
+    logMessage += ` The money goes to the vacation pot.`;
+    }
+    updates.gameLog = arrayUnion(logMessage);
+    await updateDoc(gameRef, updates);
+    break;
+    }
+    case 'vacation': {
+    const pot = gameState.vacationPot || 0;
+    await updateDoc(gameRef, {
+    [`players.${playerId}.money`]: increment(pot),
+    [`players.${playerId}.onVacation`]: true,
+    vacationPot: 0,
+    gameLog: arrayUnion(`${player.name} collected $${pot} from the vacation pot! They will skip their next turn.`)
+    });
+    break;
+    }
+    case 'go-to-jail-square':
+    await goToJail(roomId, playerId, gameState);
+    break;
+    case 'treasure': {
+    const card = treasureChestCards[Math.floor(Math.random() * treasureChestCards.length)];
+    await updateDoc(gameRef, {
+        drawnCard: card,
+        gameLog: arrayUnion(`${player.name} drew a Treasure Chest card: ${card.text}`)
+    });
+    await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
+    break;
+}
+case 'surprise': {
+    const card = surpriseCards[Math.floor(Math.random() * surpriseCards.length)];
+    await updateDoc(gameRef, {
+        drawnCard: card,
+        gameLog: arrayUnion(`${player.name} drew a Surprise card: ${card.text}`)
+    });
+    await handleCardAction(roomId, playerId, gameState, { ...card, action: () => Promise.resolve() });
+    break;
+}
+    }
+    };
 
 const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
     await updateDoc(doc(db, "games", roomId), {
@@ -1170,7 +1207,9 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
                 const sellerGets = Math.floor(currentBid * 0.9);
                 const tax = currentBid - sellerGets;
                 updates[`players.${sellerId}.money`] = increment(sellerGets);
-                updates.vacationPot = increment(tax);
+                if (gameState.settings.taxInVacationPot) {
+                    updates.vacationPot = increment(tax);
+                }
                 logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[sellerId]?.name || 'Unknown'} with a bid of $${currentBid}!`;
             } else {
                 logMessage = `${winner.name} won the auction for ${property.name} with a bid of $${currentBid}!`;
@@ -1563,7 +1602,7 @@ interface CardPopupProps {
 }
 const CardPopup: FC<CardPopupProps> = ({ card, onClose }) => {
     useEffect(() => {
-        const timer = setTimeout(onClose, 10000);
+        const timer = setTimeout(onClose, 20000);
         return () => clearTimeout(timer);
     }, [onClose]);
 
@@ -1587,28 +1626,25 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
     const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
-    const closePopup = (i: number) => {
-        setActivePopups(prev => ({ ...prev, [i]: false }));
-        if (popupTimers.current[i]) {
-            clearTimeout(popupTimers.current[i]);
-        }
-    };
-
     const togglePopup = (i: number) => {
-        const isActive = !!activePopups[i];
-        if (isActive) {
-            closePopup(i);
-            return;
-        }
-
-        setActivePopups(prev => ({ ...prev, [i]: true }));
-
-        if (popupTimers.current[i]) {
-            clearTimeout(popupTimers.current[i]);
-        }
-        popupTimers.current[i] = setTimeout(() => {
-            closePopup(i);
-        }, 10000);
+        // Clear any existing timers
+        Object.values(popupTimers.current).forEach(clearTimeout);
+        popupTimers.current = {};
+    
+        // If the clicked popup is already active, close all popups.
+        // Otherwise, open the clicked one.
+        setActivePopups(prev => {
+            const isActive = !!prev[i];
+            if (isActive) {
+                return {};
+            } else {
+                const newActivePopups = { [i]: true };
+                popupTimers.current[i] = setTimeout(() => {
+                    setActivePopups({});
+                }, 10000);
+                return newActivePopups;
+            }
+        });
     };
 
 
@@ -1737,7 +1773,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                 </div>
                 {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
                     <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[i] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
-                        <button onClick={(e) => { e.stopPropagation(); closePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
+                        <button onClick={(e) => { e.stopPropagation(); togglePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
