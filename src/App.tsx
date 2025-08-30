@@ -1317,32 +1317,38 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
     const endAuction = useCallback(async () => {
         if (!property || !auction.propertyId) return;
         const gameRef = doc(db, "games", roomId);
+        
+        // Fetch the latest game state to avoid race conditions
+        const latestGameDoc = await getDoc(gameRef);
+        if (!latestGameDoc.exists()) return;
+        const latestGameState = latestGameDoc.data() as GameState;
+        const latestAuction = latestGameState.auction;
+
         const updates: DocumentData = { "auction.active": false };
         let logMessage = "";
 
-        const finalBids = Object.entries(auction.bids || {}).sort(([, a], [, b]) => (b as number) - (a as number));
+        const finalBids = Object.entries(latestAuction.bids || {}).sort(([, a], [, b]) => (b as number) - (a as number));
 
         if (finalBids.length > 0) {
             const [highestBidderId, finalBidAmount] = finalBids[0];
-            const winner = gameState.players[highestBidderId];
+            const winner = latestGameState.players[highestBidderId];
             const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
             const ownershipArray = propertyTypeMap[property.type] as 'cities' | 'airports' | 'harbours' | 'companies';
 
-            updates["auction.currentBid"] = finalBidAmount;
-            updates["auction.highestBidder"] = highestBidderId;
-
-            updates[`players.${highestBidderId}.money`] = increment(-(finalBidAmount as number));
-            updates[`players.${highestBidderId}.${ownershipArray}`] = arrayUnion(auction.propertyId);
             updates[`board.${auction.propertyId}.owner`] = highestBidderId;
+            updates[`players.${highestBidderId}.${ownershipArray}`] = arrayUnion(auction.propertyId);
 
-            if (auction.sellerId) {
+            const winnerCurrentMoney = winner.money;
+            updates[`players.${highestBidderId}.money`] = winnerCurrentMoney - (finalBidAmount as number);
+
+            if (latestAuction.sellerId) {
                 const tax = Math.floor((finalBidAmount as number) * 0.1);
                 const sellerGets = (finalBidAmount as number) - tax;
-                updates[`players.${auction.sellerId}.money`] = increment(sellerGets);
-                if (gameState.settings.taxInVacationPot) {
+                updates[`players.${latestAuction.sellerId}.money`] = increment(sellerGets);
+                if (latestGameState.settings.taxInVacationPot) {
                     updates.vacationPot = increment(tax);
                 }
-                logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[auction.sellerId]?.name || 'Unknown'} with a bid of $${finalBidAmount}!`;
+                logMessage = `${winner.name} won the auction for ${property.name} from ${latestGameState.players[latestAuction.sellerId]?.name || 'Unknown'} with a bid of $${finalBidAmount}!`;
             } else {
                 logMessage = `${winner.name} won the auction for ${property.name} with a bid of $${finalBidAmount}!`;
             }
@@ -1352,7 +1358,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         }
         updates.gameLog = arrayUnion(logMessage);
         await updateDoc(gameRef, updates);
-    }, [auction, gameState.players, roomId, property, gameState.settings.taxInVacationPot]);
+    }, [auction.propertyId, property, roomId]);
 
 
     useEffect(() => {
