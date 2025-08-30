@@ -396,7 +396,19 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             }
             updates[`players.${playerId}.position`] = nearestAirport; updates[`players.${playerId}.animatedPosition`] = nearestAirport;
             updatesApplied = true;
-            break;
+            await updateDoc(gameRef, updates);
+            const airportState = gameState.board[String(nearestAirport)];
+            if(airportState.owner && airportState.owner !== playerId){
+                const owner = gameState.players[airportState.owner];
+                const airportsOwned = owner.airports.length;
+                const rentAmount = (initialBoardState[String(nearestAirport)] as UtilitySquare).rent[airportsOwned - 1] * 2;
+                await updateDoc(gameRef, {
+                    [`players.${playerId}.money`]: increment(-rentAmount),
+                    [`players.${airportState.owner}.money`]: increment(rentAmount),
+                    gameLog: arrayUnion(`${player.name} paid $${rentAmount} to ${owner.name}.`)
+                });
+            }
+            return;
         }
         case 'S03': {
             const utilities = [12, 26]; // Tech Corp, Energy Corp
@@ -412,7 +424,20 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             }
             updates[`players.${playerId}.position`] = nearestUtility; updates[`players.${playerId}.animatedPosition`] = nearestUtility;
             updatesApplied = true;
-            break;
+            await updateDoc(gameRef, updates);
+
+            const utilityState = gameState.board[String(nearestUtility)];
+            if(utilityState.owner && utilityState.owner !== playerId) {
+                const diceRoll = Math.floor(Math.random() * 6) + 1 + Math.floor(Math.random() * 6) + 1;
+                const rentAmount = diceRoll * 10;
+                await updateDoc(gameRef, {
+                    [`players.${playerId}.money`]: increment(-rentAmount),
+                    [`players.${utilityState.owner}.money`]: increment(rentAmount),
+                    gameLog: arrayUnion(`${player.name} rolled a ${diceRoll} and paid $${rentAmount} to ${gameState.players[utilityState.owner].name}.`)
+                });
+            }
+
+            return;
         }
         case 'S04': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
         case 'S05': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
@@ -616,8 +641,8 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
     if (!gameDoc.exists()) return;
     const gameState = gameDoc.data() as GameState;
 
-    if (sellerId && !gameState.settings.allowOwnedPropertyAuctions) {
-        alert("Auctioning owned properties is disabled for this game.");
+    if (sellerId && (!gameState.settings.allowOwnedPropertyAuctions || gameState.currentPlayerTurn !== sellerId)) {
+        alert("Auctioning owned properties is disabled or it is not your turn.");
         return;
     }
 
@@ -627,8 +652,8 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
     }
     
     const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
-    if (sellerId && gameState.players[sellerId]?.money < (property.cost || 0)) {
-        alert("The owner does not have enough money to auction this property.");
+    if (sellerId && gameState.players[sellerId]?.money < 0) {
+        alert("You cannot auction a property while in debt.");
         return;
     }
 
