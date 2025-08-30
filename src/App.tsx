@@ -636,7 +636,7 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
     });
 };
 
-const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: PlayerId | null = null) => {
+const startAuction = async (roomId: RoomId, propertyId: PropertyId, startingBid: number, sellerId: PlayerId | null = null) => {
     const gameDoc = await getDoc(doc(db, "games", roomId));
     if (!gameDoc.exists()) return;
     const gameState = gameDoc.data() as GameState;
@@ -651,21 +651,15 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
         return;
     }
     
-    const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
-    if (sellerId && gameState.players[sellerId]?.money < 0) {
-        alert("You cannot auction a property while in debt.");
-        return;
-    }
-
     await updateDoc(doc(db, "games", roomId), {
         auction: {
             active: true,
             propertyId: propertyId,
-            currentBid: Math.floor(property.cost / 2),
+            currentBid: startingBid,
             highestBidder: null,
             bidCount: 0,
             sellerId: sellerId,
-            log: [`Auction started for ${property.name}!`],
+            log: [`Auction started for ${initialBoardState[propertyId].name} with a starting bid of $${startingBid}!`],
             bids: {}
         },
     });
@@ -1826,6 +1820,22 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     const { players } = gameState;
     const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
     const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
+    const [auctioningProperty, setAuctioningProperty] = useState<PropertyId | null>(null);
+    const [startingBid, setStartingBid] = useState(0);
+
+    const handleStartAuction = (propertyId: PropertyId) => {
+        setAuctioningProperty(propertyId);
+        const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
+        setStartingBid(Math.floor(property.cost / 2));
+    };
+
+    const confirmStartAuction = () => {
+        if (auctioningProperty) {
+            startAuction(roomId, auctioningProperty, startingBid, currentPlayerId);
+            setAuctioningProperty(null);
+        }
+    };
+
 
     const togglePopup = (i: number) => {
         // Clear any existing timers
@@ -2041,7 +2051,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                                     </button>
                                 )}
                                 <button 
-                                    onClick={() => startAuction(roomId, String(i), currentPlayerId)} 
+                                    onClick={() => handleStartAuction(String(i))} 
                                     disabled={!gameState.settings.allowOwnedPropertyAuctions}
                                     className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
                                     Auction
@@ -2058,6 +2068,24 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         <div className="flex justify-center items-center p-5">
             <div className="grid grid-cols-[120px_repeat(13,_70px)_120px] grid-rows-[120px_repeat(13,_70px)_120px] gap-0.5 bg-black border-2 border-gray-500 relative">
                 {cells}
+                {auctioningProperty && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
+                    <div className="bg-gray-800 p-8 rounded-lg border border-gray-600 text-center shadow-xl w-1/2">
+                        <h2 className="text-3xl font-bold mb-4">Set Starting Bid</h2>
+                        <p className="text-lg text-gray-400 mb-4">Property: {initialBoardState[auctioningProperty].name}</p>
+                        <input
+                            type="number"
+                            value={startingBid}
+                            onChange={(e) => setStartingBid(Number(e.target.value))}
+                            className="w-full p-2 bg-gray-700 border border-gray-500 rounded text-white mb-4"
+                        />
+                        <div className="flex justify-center gap-4">
+                            <button onClick={confirmStartAuction} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">Start Auction</button>
+                            <button onClick={() => setAuctioningProperty(null)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
                 <div 
                     className="bg-[#3a4d3b] p-4 box-border flex items-center justify-center" 
                     style={{ gridColumn: '2 / 15', gridRow: '2 / 15' }}
@@ -2361,7 +2389,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                             {hasRolled && !me.onVacation && !me.inJail && (
                                 <>
                                     {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo?.name})</button>}
-                                    {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
+                                    {canBuy && <button onClick={() => startAuction(roomId, String(me.position), Math.floor((initialBoardState[String(me.position)] as UtilitySquare).cost / 2))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
                                     
                                     {me.doublesCount === 0 ? (
                                         <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
