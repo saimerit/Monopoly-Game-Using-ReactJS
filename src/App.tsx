@@ -30,7 +30,7 @@ interface Player {
     jailTurns: number;
     doublesCount: number;
     onVacation: boolean;
-    getOutOfJailFreeCards: number;
+    pardonCards: number;
     houses: number;
     hotels: number;
 }
@@ -59,8 +59,8 @@ interface Trade {
     id: string;
     fromPlayer: PlayerId;
     toPlayer: PlayerId;
-    offer: { money: number; properties: PropertyId[] };
-    request: { money: number; properties: PropertyId[] };
+    offer: { money: number; properties: PropertyId[]; pardonCards: number };
+    request: { money: number; properties: PropertyId[]; pardonCards: number };
     status: 'pending' | 'accepted' | 'rejected';
 }
 
@@ -73,6 +73,7 @@ interface GameSettings {
     rentInJail: boolean;
     taxInVacationPot: boolean;
     doubleRentOnMonopoly: boolean;
+    increasingJailFine: boolean;
 }
 
 interface Card {
@@ -99,6 +100,7 @@ interface GameState {
     winner?: PlayerId;
     propertyVisits: Record<PropertyId, number>;
     drawnCard?: Card;
+    jailFine: number;
 }
 
 interface BaseSquare {
@@ -233,7 +235,7 @@ const getInitialDynamicBoardState = (): BoardState => {
     return board;
 };
 const treasureChestCards: Omit<Card, 'action'>[] = [
-    { id: 'TC01', type: 'treasure', text: 'Get out of Jail Free: This card may be kept until needed, or traded.' },
+    { id: 'TC01', type: 'treasure', text: 'Receive a pardon card' },
     { id: 'TC02', type: 'treasure', text: 'Advance to Go: Collect $300.' },
     { id: 'TC03', type: 'treasure', text: 'Bank error in your favor: Collect $200.' },
     { id: 'TC04', type: 'treasure', text: "Doctor's fees: Pay $50." },
@@ -264,7 +266,7 @@ const surpriseCards: Omit<Card, 'action'>[] = [
     { id: 'S02', type: 'surprise', text: 'Advance to the nearest Airport: If unowned, you may buy it from the Bank. If owned, pay the owner twice the rental to which they are otherwise entitled.' },
     { id: 'S03', type: 'surprise', text: 'Advance to the nearest utility: If unowned, you may buy it from the Bank. If owned, throw dice and pay the owner a total ten times the amount thrown.' },
     { id: 'S04', type: 'surprise', text: 'Bank pays you a dividend of $50.' },
-    { id: 'S05', type: 'surprise', text: 'Get out of Jail Free: This card may be kept until needed, or traded.' },
+    { id: 'S05', type: 'surprise', text: 'Receive a pardon card' },
     { id: 'S06', type: 'surprise', text: 'Go Back 3 Spaces.' },
     { id: 'S07', type: 'surprise', text: 'Go to Jail: Go directly to Jail. Do not pass Go, do not collect $200.' },
     { id: 'S08', type: 'surprise', text: 'Make general repairs on all your property: For each house pay $25, for each hotel pay $100.' },
@@ -293,7 +295,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
 
     switch (card.id) {
         // Treasure Chest Cards
-        case 'TC01': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
+        case 'TC01': updates[`players.${playerId}.pardonCards`] = increment(1); updatesApplied = true; break;
         case 'TC02': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
         case 'TC03': updates[`players.${playerId}.money`] = increment(200); updatesApplied = true; break;
         case 'TC04': updates[`players.${playerId}.money`] = increment(-50); moneyToPot = 50; updatesApplied = true; break;
@@ -412,7 +414,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             break;
         }
         case 'S04': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
-        case 'S05': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
+        case 'S05': updates[`players.${playerId}.pardonCards`] = increment(1); updatesApplied = true; break;
         case 'S06': {
             const newPosition = (player.position - 3 + 56) % 56;
             updates[`players.${playerId}.position`] = newPosition;
@@ -711,12 +713,19 @@ case 'surprise': {
     };
 
 const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
-    await updateDoc(doc(db, "games", roomId), {
+    const updates: DocumentData = {
         [`players.${playerId}.position`]: 14,
         [`players.${playerId}.inJail`]: true,
         [`players.${playerId}.doublesCount`]: 0,
         gameLog: arrayUnion(`${gameState.players[playerId].name} was sent to Jail!`)
-    });
+    };
+
+    if (gameState.settings.increasingJailFine) {
+        updates.jailFine = increment(20);
+    }
+
+
+    await updateDoc(doc(db, "games", roomId), updates);
 };
 
 const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition: number, gameState: GameState) => {
@@ -1011,6 +1020,7 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, 
                 <ToggleButton label="Rent in Jail" settingKey="rentInJail" currentValue={settings.rentInJail} />
                 <ToggleButton label="Tax to Vacation Pot" settingKey="taxInVacationPot" currentValue={settings.taxInVacationPot} />
                 <ToggleButton label="2x Rent on Monopoly" settingKey="doubleRentOnMonopoly" currentValue={settings.doubleRentOnMonopoly} />
+                <ToggleButton label="Increasing Jail Fine" settingKey="increasingJailFine" currentValue={settings.increasingJailFine} />
             </div>
         </div>
     );
@@ -1089,6 +1099,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                 rentInJail: false,
                 taxInVacationPot: true,
                 doubleRentOnMonopoly: true,
+                increasingJailFine: false,
             },
             players: {
                 [currentPlayerId]: { 
@@ -1105,7 +1116,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                     doublesCount: 0, 
                     onVacation: false, 
                     color: playerColors[0], 
-                    getOutOfJailFreeCards: 0,
+                    pardonCards: 0,
                     houses: 0,
                     hotels: 0
                 }
@@ -1116,7 +1127,8 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             vacationPot: 0,
             auction: { active: false, log: [], bids: {} },
             trades: {},
-            propertyVisits: {}
+            propertyVisits: {},
+            jailFine: 100,
         };
         try {
             await setDoc(gameRef, newGame);
@@ -1157,7 +1169,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                         doublesCount: 0, 
                         onVacation: false, 
                         color: newPlayerColor,
-                        getOutOfJailFreeCards: 0,
+                        pardonCards: 0,
                         houses: 0,
                         hotels: 0
                     },
@@ -1371,8 +1383,8 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
     const trade = isViewing ? gameState.trades[tradeId] : null;
 
     const [tradePartnerId, setTradePartnerId] = useState<PlayerId>("");
-    const [offer, setOffer] = useState({ money: 0, properties: [] as PropertyId[] });
-    const [request, setRequest] = useState({ money: 0, properties: [] as PropertyId[] });
+    const [offer, setOffer] = useState({ money: 0, properties: [] as PropertyId[], pardonCards: 0 });
+    const [request, setRequest] = useState({ money: 0, properties: [] as PropertyId[], pardonCards: 0 });
 
     const me = gameState.players[currentPlayerId];
     const tradePartner = gameState.players[tradePartnerId];
@@ -1415,6 +1427,9 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
 
             fromPlayer.money = fromPlayer.money - trade.offer.money + trade.request.money;
             toPlayer.money = toPlayer.money + trade.offer.money - trade.request.money;
+
+            fromPlayer.pardonCards = fromPlayer.pardonCards - trade.offer.pardonCards + trade.request.pardonCards;
+            toPlayer.pardonCards = toPlayer.pardonCards + trade.offer.pardonCards - trade.request.pardonCards;
 
             const propertyTypeMap: Record<string, 'cities' | 'airports' | 'harbours' | 'companies'> = {
                 'city': 'cities',
@@ -1480,6 +1495,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                             <div className="flex-1 border border-gray-600 p-4 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Offer</h3>
                                 <p>Money: ${trade.offer.money}</p>
+                                <p>Pardon Cards: {trade.offer.pardonCards}</p>
                                 <ul className="list-disc list-inside mt-2">
                                     {trade.offer.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
@@ -1487,6 +1503,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                             <div className="flex-1 border border-gray-600 p-4 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Request</h3>
                                 <p>Money: ${trade.request.money}</p>
+                                <p>Pardon Cards: {trade.request.pardonCards}</p>
                                 <ul className="list-disc list-inside mt-2">
                                     {trade.request.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
@@ -1512,6 +1529,8 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                     <h3 className="text-xl font-semibold mb-2 text-center">Your Offer</h3>
                                     <label className="block mb-2">Money: ${offer.money}</label>
                                     <input type="range" min="0" max={me.money} value={offer.money} onChange={(e) => setOffer({...offer, money: Number(e.target.value)})} className="w-full" />
+                                    <label className="block mb-2">Pardon Cards: {offer.pardonCards}</label>
+                                    <input type="range" min="0" max={me.pardonCards} value={offer.pardonCards} onChange={(e) => setOffer({...offer, pardonCards: Number(e.target.value)})} className="w-full" />
                                     <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
                                         {getPlayerProperties(me).map(propId => (
                                             <label key={propId} className="flex items-center space-x-2">
@@ -1527,6 +1546,8 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                     <h3 className="text-xl font-semibold mb-2 text-center">Their Request</h3>
                                     <label className="block mb-2">Money: ${request.money}</label>
                                     <input type="range" min="0" max={tradePartner.money} value={request.money} onChange={(e) => setRequest({...request, money: Number(e.target.value)})} className="w-full" />
+                                    <label className="block mb-2">Pardon Cards: {request.pardonCards}</label>
+                                    <input type="range" min="0" max={tradePartner.pardonCards} value={request.pardonCards} onChange={(e) => setRequest({...request, pardonCards: Number(e.target.value)})} className="w-full" />
                                     <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
                                         {getPlayerProperties(tradePartner).map(propId => (
                                             <label key={propId} className="flex items-center space-x-2">
@@ -2016,6 +2037,36 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             alert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
             return;
         }
+
+        if (player.inJail) {
+            const die1 = Math.floor(Math.random() * 6) + 1;
+            const die2 = Math.floor(Math.random() * 6) + 1;
+            const isDoubles = die1 === die2;
+    
+            if (isDoubles) {
+                await updateDoc(doc(db, "games", roomId), {
+                    [`players.${currentPlayerId}.inJail`]: false,
+                    [`players.${currentPlayerId}.jailTurns`]: 0,
+                    gameLog: arrayUnion(`${player.name} rolled doubles and got out of jail!`)
+                });
+            } else {
+                if (player.jailTurns >= 2) {
+                    await updateDoc(doc(db, "games", roomId), {
+                        [`players.${currentPlayerId}.inJail`]: false,
+                        [`players.${currentPlayerId}.jailTurns`]: 0,
+                        [`players.${currentPlayerId}.money`]: increment(-gameState.jailFine),
+                        gameLog: arrayUnion(`${player.name} did not roll doubles, paid the fine of $${gameState.jailFine}, and got out of jail.`)
+                    });
+                } else {
+                    await updateDoc(doc(db, "games", roomId), {
+                        [`players.${currentPlayerId}.jailTurns`]: increment(1),
+                        gameLog: arrayUnion(`${player.name} is in jail and did not roll doubles.`)
+                    });
+                }
+            }
+            setHasRolled(true);
+            return;
+        }
     
         let doublesCount = player.doublesCount || 0;
     
@@ -2060,6 +2111,33 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         }
     
         setHasRolled(true);
+    };
+
+    const payJailFine = async () => {
+        if (!gameState || !gameState.players[currentPlayerId].inJail) return;
+        const player = gameState.players[currentPlayerId];
+        const fine = gameState.jailFine;
+        if (player.money < fine) return alert("Not enough money to pay the fine!");
+
+        await updateDoc(doc(db, "games", roomId), {
+            [`players.${currentPlayerId}.money`]: increment(-fine),
+            [`players.${currentPlayerId}.inJail`]: false,
+            [`players.${currentPlayerId}.jailTurns`]: 0,
+            gameLog: arrayUnion(`${player.name} paid $${fine} to get out of jail.`)
+        });
+    };
+    
+    const usePardonCard = async () => {
+        if (!gameState || !gameState.players[currentPlayerId].inJail) return;
+        const player = gameState.players[currentPlayerId];
+        if (player.pardonCards <= 0) return alert("You don't have a pardon card!");
+    
+        await updateDoc(doc(db, "games", roomId), {
+            [`players.${currentPlayerId}.pardonCards`]: increment(-1),
+            [`players.${currentPlayerId}.inJail`]: false,
+            [`players.${currentPlayerId}.jailTurns`]: 0,
+            gameLog: arrayUnion(`${player.name} used a pardon card to get out of jail.`)
+        });
     };
 
     const handleEndTurn = async () => {
@@ -2177,11 +2255,22 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     {amIOnTurn && gameState.status === 'in-progress' && (
                         <div className="grid grid-cols-2 gap-2 mb-4">
                             {!hasRolled && !me.onVacation && (
-                                <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                                    {me.doublesCount > 0 ? "Roll Again" : "Roll Dice"}
-                                </button>
+                                 <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                 {me.inJail ? `Roll for Doubles (Turns: ${me.jailTurns})` : (me.doublesCount > 0 ? "Roll Again" : "Roll Dice")}
+                             </button>
                             )}
                             {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
+
+                            {me.inJail && (
+                                <>
+                                    <button onClick={payJailFine} disabled={me.money < gameState.jailFine} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">
+                                        Pay ${gameState.jailFine}
+                                    </button>
+                                    <button onClick={usePardonCard} disabled={me.pardonCards <= 0} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">
+                                        Use Pardon Card ({me.pardonCards})
+                                    </button>
+                                </>
+                            )}
 
                             {hasRolled && !me.onVacation && (
                                 <>
