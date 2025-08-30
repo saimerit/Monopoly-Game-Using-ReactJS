@@ -1333,7 +1333,6 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
     useEffect(() => {
         if (!auction.active) return;
         setBidAmount(auction.currentBid || 0);
-        setTimer(10);
         const interval = setInterval(() => {
             setTimer(prev => {
                 if (prev <= 1) {
@@ -1347,7 +1346,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             });
         }, 1000);
         return () => clearInterval(interval);
-    }, [auction.active, gameState.hostId, currentPlayerId, endAuction, auction.bidCount, auction.currentBid]);
+    }, [auction.active, gameState.hostId, currentPlayerId, endAuction]);
     
     if (!property) return null;
 
@@ -2079,21 +2078,12 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [showVisitStatsModal, setShowVisitStatsModal] = useState(false);
     const [showCardPopup, setShowCardPopup] = useState(false);
-    const [isAnimating, setIsAnimating] = useState(false);
-    const lastPlayerPositionRef = useRef<number | undefined>(undefined);
-
+    
     useEffect(() => {
         const gameRef = doc(db, "games", roomId);
         const unsubscribe = onSnapshot(gameRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as GameState;
-                const currentPlayer = data.players[currentPlayerId];
-                if (currentPlayer) {
-                    if (lastPlayerPositionRef.current === undefined) {
-                        data.players[currentPlayerId].animatedPosition = currentPlayer.position;
-                    }
-                    lastPlayerPositionRef.current = currentPlayer.position;
-                }
                 setGameState(data);
                 if (data.drawnCard) {
                     setShowCardPopup(true);
@@ -2108,47 +2098,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     useEffect(() => {
         setHasRolled(false);
     }, [gameState?.currentPlayerTurn]);
-
-    // Player animation logic
-    const currentPlayerPosition = gameState?.players[currentPlayerId]?.position;
-    useEffect(() => {
-        if (!gameState) return;
-        
-        const currentPlayer = gameState.players[currentPlayerId];
-        if (!currentPlayer || currentPlayer.position === currentPlayer.animatedPosition || isAnimating) return;
-    
-        setIsAnimating(true);
-        
-        const animateMove = async () => {
-            let currentAnimatedPosition = currentPlayer.animatedPosition;
-            const finalPosition = currentPlayer.position;
-    
-            while (currentAnimatedPosition !== finalPosition) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                currentAnimatedPosition = (currentAnimatedPosition + 1) % 56;
-    
-                setGameState(prev => {
-                    if (!prev) return prev;
-                    const newPlayers = {
-                        ...prev.players,
-                        [currentPlayerId]: {
-                            ...prev.players[currentPlayerId],
-                            animatedPosition: currentAnimatedPosition
-                        }
-                    };
-                    return { ...prev, players: newPlayers };
-                });
-            }
-            setIsAnimating(false);
-            const updatedGameDoc = await getDoc(doc(db, "games", roomId));
-            if (updatedGameDoc.exists()) {
-                const updatedGameState = updatedGameDoc.data() as GameState;
-                await handleLandingOnSquare(roomId, currentPlayerId, finalPosition, 0, updatedGameState);
-            }
-        };
-
-        animateMove();
-    }, [currentPlayerPosition, currentPlayerId, roomId, isAnimating, gameState]);
 
     const handleStartGame = async () => {
         if (!gameState || gameState.hostId !== currentPlayerId) return alert("Only the admin can start the game.");
@@ -2220,6 +2169,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     
         const updates: DocumentData = {
             [`players.${currentPlayerId}.position`]: newPosition,
+            [`players.${currentPlayerId}.animatedPosition`]: newPosition,
             [`players.${currentPlayerId}.doublesCount`]: doublesCount,
         };
         
@@ -2363,14 +2313,14 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     {amIOnTurn && gameState.status === 'in-progress' && (
                         <div className="grid grid-cols-2 gap-2 mb-4">
                             {!me.inJail && !hasRolled && !me.onVacation && (
-                                <button onClick={handleRollDice} disabled={isAnimating} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                                     {me.doublesCount > 0 ? "Roll Again" : "Roll Dice"}
                                 </button>
                             )}
                             {me.inJail && !hasRolled && (
                                 <>
                                     <p className="col-span-2 text-center text-yellow-400">You are in Jail. Turn {me.jailTurns + 1} of 3</p>
-                                    <button onClick={handleRollDice} disabled={isAnimating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll for Doubles</button>
+                                    <button onClick={handleRollDice} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll for Doubles</button>
                                     <button onClick={() => payJailFine(roomId, currentPlayerId, gameState)} disabled={me.money < jailFine} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Pay ${jailFine} Fine</button>
                                     <button onClick={() => handleUsePardonCard(roomId, currentPlayerId, gameState)} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">Use Get Out of Jail Free Card</button>
                                 </>
