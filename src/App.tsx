@@ -21,6 +21,7 @@ interface Player {
     name: string;
     money: number;
     position: number;
+    animatedPosition: number;
     color: string;
     cities: PropertyId[];
     airports: PropertyId[];
@@ -30,7 +31,7 @@ interface Player {
     jailTurns: number;
     doublesCount: number;
     onVacation: boolean;
-    pardonCards: number;
+    getOutOfJailFreeCards: number;
     houses: number;
     hotels: number;
 }
@@ -59,8 +60,8 @@ interface Trade {
     id: string;
     fromPlayer: PlayerId;
     toPlayer: PlayerId;
-    offer: { money: number; properties: PropertyId[]; pardonCards: number };
-    request: { money: number; properties: PropertyId[]; pardonCards: number };
+    offer: { money: number; properties: PropertyId[] };
+    request: { money: number; properties: PropertyId[] };
     status: 'pending' | 'accepted' | 'rejected';
 }
 
@@ -100,7 +101,7 @@ interface GameState {
     winner?: PlayerId;
     propertyVisits: Record<PropertyId, number>;
     drawnCard?: Card;
-    jailFine: number;
+    jailCount: Record<PlayerId, number>;
 }
 
 interface BaseSquare {
@@ -176,9 +177,9 @@ const initialBoardState: Record<string, BoardSquare> = {
     7: { name: "Surprise", type: "surprise" },
     8: { name: "Beijing", type: "city", country: "China", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
     9: { name: "Shanghai", type: "city", country: "China", cost: 100, rent: [6, 30, 90, 270, 400, 550] },
-    10: { name: "Harbour 1", type: "harbour", cost: 150, rent: [4, 10] },
+    10: { name: "Harbour 1", type: "harbour", cost: 150, rent: [50, 100, 150, 200] },
     11: { name: "Shenzhen", type: "city", country: "China", cost: 120, rent: [8, 40, 100, 300, 450, 600] },
-    12: { name: "Tech Corp", type: "company", cost: 150, rent: [] },
+    12: { name: "Tech Corp", type: "company", cost: 150, rent: [4, 10] },
     13: { name: "Toronto", type: "city", country: "Canada", cost: 140, rent: [10, 50, 150, 450, 625, 750] },
     14: { name: "Jail / Visiting", type: "jail" },
     15: { name: "Vancouver", type: "city", country: "Canada", cost: 160, rent: [12, 60, 180, 500, 700, 900] },
@@ -187,12 +188,12 @@ const initialBoardState: Record<string, BoardSquare> = {
     18: { name: "Marseille", type: "city", country: "France", cost: 180, rent: [14, 70, 200, 550, 750, 950] },
     19: { name: "Treasure Chest", type: "treasure" },
     20: { name: "Lyon", type: "city", country: "France", cost: 200, rent: [16, 80, 220, 600, 800, 1000] },
-    21: { name: "Harbour 2", type: "harbour", cost: 150, rent: [4, 10] },
+    21: { name: "Harbour 2", type: "harbour", cost: 150, rent: [50, 100, 150, 200] },
     22: { name: "Nice", type: "city", country: "France", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
     23: { name: "Surprise", type: "surprise" },
     24: { name: "Berlin", type: "city", country: "Germany", cost: 220, rent: [18, 90, 250, 700, 875, 1050] },
     25: { name: "Munich", type: "city", country: "Germany", cost: 240, rent: [20, 100, 300, 750, 925, 1100] },
-    26: { name: "Energy Corp", type: "company", cost: 150, rent: [] },
+    26: { name: "Energy Corp", type: "company", cost: 150, rent: [4, 10] },
     27: { name: "Hamburg", type: "city", country: "Germany", cost: 260, rent: [22, 110, 330, 800, 975, 1150] },
     28: { name: "Vacation", type: "vacation" },
     29: { name: "Moscow", type: "city", country: "Russia", cost: 260, rent: [22, 110, 330, 800, 975, 1150] },
@@ -202,7 +203,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     33: { name: "Tokyo", type: "city", country: "Japan", cost: 300, rent: [26, 130, 390, 900, 1100, 1275] },
     34: { name: "Treasure Chest", type: "treasure" },
     35: { name: "Osaka", type: "city", country: "Japan", cost: 320, rent: [28, 150, 450, 1000, 1200, 1400] },
-    36: { name: "Harbour 3", type: "harbour", cost: 150, rent: [4, 10] },
+    36: { name: "Harbour 3", type: "harbour", cost: 150, rent: [50, 100, 150, 200] },
     37: { name: "Mumbai", type: "city", country: "India", cost: 350, rent: [35, 175, 500, 1100, 1300, 1500] },
     38: { name: "Surprise", type: "surprise" },
     39: { name: "Delhi", type: "city", country: "India", cost: 400, rent: [50, 200, 600, 1400, 1700, 2000] },
@@ -216,7 +217,7 @@ const initialBoardState: Record<string, BoardSquare> = {
     47: { name: "Treasure Chest", type: "treasure" },
     48: { name: "Glasgow", type: "city", country: "UK", cost: 425, rent: [55, 225, 650, 1500, 1800, 2100] },
     49: { name: "Sydney", type: "city", country: "Australia", cost: 450, rent: [60, 250, 700, 1600, 1900, 2200] },
-    50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [4, 10] },
+    50: { name: "Harbour 4", type: "harbour", cost: 150, rent: [50, 100, 150, 200] },
     51: { name: "Melbourne", type: "city", country: "Australia", cost: 475, rent: [65, 275, 750, 2000, 2400] },
     52: { name: "Canberra", type: "city", country: "Australia", cost: 500, rent: [70, 300, 800, 1800, 2100, 2500] },
     53: { name: "New York", type: "city", country: "USA", cost: 550, rent: [75, 325, 850, 1900, 2200, 2600] },
@@ -235,7 +236,7 @@ const getInitialDynamicBoardState = (): BoardState => {
     return board;
 };
 const treasureChestCards: Omit<Card, 'action'>[] = [
-    { id: 'TC01', type: 'treasure', text: 'Receive a pardon card' },
+    { id: 'TC01', type: 'treasure', text: 'Get out of Jail Free: This card may be kept until needed, or traded.' },
     { id: 'TC02', type: 'treasure', text: 'Advance to Go: Collect $300.' },
     { id: 'TC03', type: 'treasure', text: 'Bank error in your favor: Collect $200.' },
     { id: 'TC04', type: 'treasure', text: "Doctor's fees: Pay $50." },
@@ -266,7 +267,7 @@ const surpriseCards: Omit<Card, 'action'>[] = [
     { id: 'S02', type: 'surprise', text: 'Advance to the nearest Airport: If unowned, you may buy it from the Bank. If owned, pay the owner twice the rental to which they are otherwise entitled.' },
     { id: 'S03', type: 'surprise', text: 'Advance to the nearest utility: If unowned, you may buy it from the Bank. If owned, throw dice and pay the owner a total ten times the amount thrown.' },
     { id: 'S04', type: 'surprise', text: 'Bank pays you a dividend of $50.' },
-    { id: 'S05', type: 'surprise', text: 'Receive a pardon card' },
+    { id: 'S05', type: 'surprise', text: 'Get out of Jail Free: This card may be kept until needed, or traded.' },
     { id: 'S06', type: 'surprise', text: 'Go Back 3 Spaces.' },
     { id: 'S07', type: 'surprise', text: 'Go to Jail: Go directly to Jail. Do not pass Go, do not collect $200.' },
     { id: 'S08', type: 'surprise', text: 'Make general repairs on all your property: For each house pay $25, for each hotel pay $100.' },
@@ -295,8 +296,8 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
 
     switch (card.id) {
         // Treasure Chest Cards
-        case 'TC01': updates[`players.${playerId}.pardonCards`] = increment(1); updatesApplied = true; break;
-        case 'TC02': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
+        case 'TC01': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
+        case 'TC02': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.animatedPosition`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
         case 'TC03': updates[`players.${playerId}.money`] = increment(200); updatesApplied = true; break;
         case 'TC04': updates[`players.${playerId}.money`] = increment(-50); moneyToPot = 50; updatesApplied = true; break;
         case 'TC05': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
@@ -362,7 +363,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
         }
         case 'TC21': {
             const pot = gameState.vacationPot || 0;
-            updates[`players.${playerId}.position`] = 28;
+            updates[`players.${playerId}.position`] = 28; updates[`players.${playerId}.animatedPosition`] = 28;
             updates[`players.${playerId}.money`] = increment(pot);
             updates.vacationPot = 0;
             updatesApplied = true;
@@ -375,12 +376,12 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             if (player.position > toLondon) {
                 updates[`players.${playerId}.money`] = increment(200);
             }
-            updates[`players.${playerId}.position`] = toLondon;
+            updates[`players.${playerId}.position`] = toLondon; updates[`players.${playerId}.animatedPosition`] = toLondon;
             updatesApplied = true;
             break;
         }
         // Surprise Cards
-        case 'S01': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
+        case 'S01': updates[`players.${playerId}.position`] = 0; updates[`players.${playerId}.animatedPosition`] = 0; updates[`players.${playerId}.money`] = increment(300); updatesApplied = true; break;
         case 'S02': {
             const airports = [5, 16, 31, 45];
             let nearestAirport = airports[0];
@@ -393,7 +394,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
                     nearestAirport = airport;
                 }
             }
-            updates[`players.${playerId}.position`] = nearestAirport;
+            updates[`players.${playerId}.position`] = nearestAirport; updates[`players.${playerId}.animatedPosition`] = nearestAirport;
             updatesApplied = true;
             break;
         }
@@ -409,15 +410,15 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
                     nearestUtility = utility;
                 }
             }
-            updates[`players.${playerId}.position`] = nearestUtility;
+            updates[`players.${playerId}.position`] = nearestUtility; updates[`players.${playerId}.animatedPosition`] = nearestUtility;
             updatesApplied = true;
             break;
         }
         case 'S04': updates[`players.${playerId}.money`] = increment(50); updatesApplied = true; break;
-        case 'S05': updates[`players.${playerId}.pardonCards`] = increment(1); updatesApplied = true; break;
+        case 'S05': updates[`players.${playerId}.getOutOfJailFreeCards`] = increment(1); updatesApplied = true; break;
         case 'S06': {
             const newPosition = (player.position - 3 + 56) % 56;
-            updates[`players.${playerId}.position`] = newPosition;
+            updates[`players.${playerId}.position`] = newPosition; updates[`players.${playerId}.animatedPosition`] = newPosition;
             updatesApplied = true;
             await updateDoc(gameRef, updates);
             const updatedGameDoc = await getDoc(gameRef);
@@ -441,7 +442,7 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             if (player.position > toAirport1) {
                 updates[`players.${playerId}.money`] = increment(200);
             }
-            updates[`players.${playerId}.position`] = toAirport1;
+            updates[`players.${playerId}.position`] = toAirport1; updates[`players.${playerId}.animatedPosition`] = toAirport1;
             updatesApplied = true;
             break;
         }
@@ -484,20 +485,20 @@ const handleCardAction = async (roomId: RoomId, playerId: PlayerId, gameState: G
             if (player.position > toNewYork) {
                 updates[`players.${playerId}.money`] = increment(200);
             }
-            updates[`players.${playerId}.position`] = toNewYork;
+            updates[`players.${playerId}.position`] = toNewYork; updates[`players.${playerId}.animatedPosition`] = toNewYork;
             updates[`players.${playerId}.money`] = increment(pot);
             updates.vacationPot = 0;
             updatesApplied = true;
             break;
         }
         case 'S18': moneyToPot = 100; updatesApplied = true; break;
-        case 'S19': updates[`players.${playerId}.position`] = 28; updatesApplied = true; break;
+        case 'S19': updates[`players.${playerId}.position`] = 28; updates[`players.${playerId}.animatedPosition`] = 28; updatesApplied = true; break;
         case 'S20': {
             const toTokyo = 33;
             if (player.position > toTokyo) {
                 updates[`players.${playerId}.money`] = increment(200);
             }
-            updates[`players.${playerId}.position`] = toTokyo;
+            updates[`players.${playerId}.position`] = toTokyo; updates[`players.${playerId}.animatedPosition`] = toTokyo;
             updatesApplied = true;
             break;
         }
@@ -590,7 +591,8 @@ const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition:
             break;
         }
         case 'harbour': {
-            rentAmount = squareInfo.rent[0] * diceRoll;
+            const harboursOwned = owner.harbours.length;
+            rentAmount = (squareInfo.rent[harboursOwned - 1] as number) || 0;
             break;
         }
         case 'company': {
@@ -623,8 +625,13 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
         alert("Auctions for unowned properties are disabled for this game.");
         return;
     }
-
+    
     const property = initialBoardState[propertyId] as CitySquare | UtilitySquare;
+    if (sellerId && gameState.players[sellerId]?.money < (property.cost || 0)) {
+        alert("The owner does not have enough money to auction this property.");
+        return;
+    }
+
     await updateDoc(doc(db, "games", roomId), {
         auction: {
             active: true,
@@ -640,7 +647,7 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
 };
 
 const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosition: number, diceRoll: number, gameState: GameState) => {
-    const square = initialBoardState[newPosition];
+    const square = initialBoardState[String(newPosition)];
     if (!square) return;
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
@@ -659,7 +666,7 @@ const handleLandingOnSquare = async (roomId: RoomId, playerId: PlayerId, newPosi
     case 'airport':
     case 'harbour':
     case 'company':
-    if (gameState.board[newPosition].owner && gameState.board[newPosition].owner !== playerId) {
+    if (gameState.board[String(newPosition)].owner && gameState.board[String(newPosition)].owner !== playerId) {
     await handlePayment(roomId, playerId, String(newPosition), diceRoll, gameState);
     }
     break;
@@ -710,27 +717,60 @@ case 'surprise': {
     break;
 }
     }
-    };
+};
 
 const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
-    const updates: DocumentData = {
+    const gameRef = doc(db, "games", roomId);
+    const jailCount = (gameState.jailCount?.[playerId] || 0) + 1;
+    await updateDoc(gameRef, {
         [`players.${playerId}.position`]: 14,
+        [`players.${playerId}.animatedPosition`]: 14,
         [`players.${playerId}.inJail`]: true,
+        [`players.${playerId}.jailTurns`]: 0,
         [`players.${playerId}.doublesCount`]: 0,
-        gameLog: arrayUnion(`${gameState.players[playerId].name} was sent to Jail!`)
-    };
+        [`jailCount.${playerId}`]: jailCount,
+        gameLog: arrayUnion(`${gameState.players[playerId].name} was sent to Jail! This is their ${jailCount} time in jail.`)
+    });
+};
 
+const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
+    const gameRef = doc(db, "games", roomId);
+    const player = gameState.players[playerId];
+    let fine = 100;
     if (gameState.settings.increasingJailFine) {
-        updates.jailFine = increment(20);
+        fine = fine + ((gameState.jailCount?.[playerId] || 0) - 1) * 20;
+    }
+    if (player.money < fine) {
+        alert("You do not have enough money to pay the fine.");
+        return;
     }
 
+    await updateDoc(gameRef, {
+        [`players.${playerId}.money`]: increment(-fine),
+        [`players.${playerId}.inJail`]: false,
+        gameLog: arrayUnion(`${player.name} paid a $${fine} fine to get out of jail.`)
+    });
+};
 
-    await updateDoc(doc(db, "games", roomId), updates);
+const usePardonCard = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
+    const gameRef = doc(db, "games", roomId);
+    const player = gameState.players[playerId];
+
+    if (player.getOutOfJailFreeCards <= 0) {
+        alert("You do not have a Get Out of Jail Free card.");
+        return;
+    }
+
+    await updateDoc(gameRef, {
+        [`players.${playerId}.getOutOfJailFreeCards`]: increment(-1),
+        [`players.${playerId}.inJail`]: false,
+        gameLog: arrayUnion(`${player.name} used a Get Out of Jail Free card to get out of jail.`)
+    });
 };
 
 const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition: number, gameState: GameState) => {
     const player = gameState.players[playerId];
-    const property = initialBoardState[propertyPosition] as CitySquare | UtilitySquare;
+    const property = initialBoardState[String(propertyPosition)] as CitySquare | UtilitySquare;
     if (player.money < property.cost) {
         alert("Not enough money!");
         return;
@@ -775,7 +815,8 @@ const sellProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: Prop
     };
 
     if (player[ownershipArray].includes(propertyId)) {
-        updates[`players.${playerId}.${ownershipArray}`] = player[ownershipArray].filter(p => p !== propertyId);
+      const newProperties = player[ownershipArray].filter(p => p !== propertyId);
+      updates[`players.${playerId}.${ownershipArray}`] = newProperties;
     }
     
     await updateDoc(doc(db, "games", roomId), updates);
@@ -791,6 +832,10 @@ const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: 
 
     if (propertyState.houses > 0 || propertyState.hotels > 0) {
         alert("You must sell all houses and hotels before mortgaging.");
+        return;
+    }
+    if (propertyState.owner !== playerId) {
+        alert("You can only mortgage your own properties.");
         return;
     }
     if (propertyState.mortgaged) return; // Already mortgaged
@@ -814,6 +859,10 @@ const unmortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId
 
     if (player.money < unmortgageCost) {
         alert(`You need $${Math.ceil(unmortgageCost)} to unmortgage.`);
+        return;
+    }
+    if (gameState.board[propertyId].owner !== playerId) {
+        alert("You can only unmortgage your own properties.");
         return;
     }
 
@@ -1107,6 +1156,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                     name: playerName, 
                     money: initialMoney, 
                     position: 0, 
+                    animatedPosition: 0, 
                     cities: [], 
                     airports: [], 
                     harbours: [], 
@@ -1116,7 +1166,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                     doublesCount: 0, 
                     onVacation: false, 
                     color: playerColors[0], 
-                    pardonCards: 0,
+                    getOutOfJailFreeCards: 0,
                     houses: 0,
                     hotels: 0
                 }
@@ -1128,7 +1178,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             auction: { active: false, log: [], bids: {} },
             trades: {},
             propertyVisits: {},
-            jailFine: 100,
+            jailCount: {}
         };
         try {
             await setDoc(gameRef, newGame);
@@ -1160,6 +1210,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                         name: playerName, 
                         money: gameData.settings.initialMoney, 
                         position: 0, 
+                        animatedPosition: 0,
                         cities: [], 
                         airports: [], 
                         harbours: [], 
@@ -1169,7 +1220,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
                         doublesCount: 0, 
                         onVacation: false, 
                         color: newPlayerColor,
-                        pardonCards: 0,
+                        getOutOfJailFreeCards: 0,
                         houses: 0,
                         hotels: 0
                     },
@@ -1190,7 +1241,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
 
     return (
         <div className="max-w-7xl mx-auto">
-            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 訣</h1>
+            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 诀</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Actions */}
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1239,12 +1290,12 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
     const hasBid = !!auction.bids[currentPlayerId];
 
     const endAuction = useCallback(async () => {
-        if (!property) return;
+        if (!property || !auction.propertyId) return;
         const gameRef = doc(db, "games", roomId);
         const updates: DocumentData = { "auction.active": false };
         let logMessage = "";
 
-        const finalBids = Object.entries(auction.bids || {}).sort(([, a], [, b]) => b - a);
+        const finalBids = Object.entries(auction.bids || {}).sort(([, a], [, b]) => (b as number) - (a as number));
 
         if (finalBids.length > 0) {
             const [highestBidderId, finalBidAmount] = finalBids[0];
@@ -1255,13 +1306,13 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             updates["auction.currentBid"] = finalBidAmount;
             updates["auction.highestBidder"] = highestBidderId;
 
-            updates[`players.${highestBidderId}.money`] = increment(-finalBidAmount);
-            updates[`players.${highestBidderId}.${ownershipArray}`] = arrayUnion(String(property.name));
-            updates[`board.${property.name}.owner`] = highestBidderId;
+            updates[`players.${highestBidderId}.money`] = increment(-(finalBidAmount as number));
+            updates[`players.${highestBidderId}.${ownershipArray}`] = arrayUnion(auction.propertyId);
+            updates[`board.${auction.propertyId}.owner`] = highestBidderId;
 
             if (auction.sellerId) {
-                const sellerGets = Math.floor(finalBidAmount * 0.9);
-                const tax = finalBidAmount - sellerGets;
+                const sellerGets = Math.floor((finalBidAmount as number) * 0.9);
+                const tax = (finalBidAmount as number) - sellerGets;
                 updates[`players.${auction.sellerId}.money`] = increment(sellerGets);
                 if (gameState.settings.taxInVacationPot) {
                     updates.vacationPot = increment(tax);
@@ -1296,14 +1347,20 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             });
         }, 1000);
         return () => clearInterval(interval);
-    }, [auction.active, gameState.hostId, currentPlayerId, endAuction, auction.bidCount]);
+    }, [auction.active, gameState.hostId, currentPlayerId, endAuction, auction.bidCount, auction.currentBid]);
     
     if (!property) return null;
 
     const placeBid = async () => {
         if (isSeller || hasBid) return;
-        if (bidAmount <= (auction.currentBid || 0)) return alert("Your bid must be higher than the current highest bid.");
-        if (bidAmount > me.money) return alert("You cannot bid more money than you have.");
+        if (bidAmount <= (auction.currentBid || 0)) {
+            alert("Your bid must be higher than the current highest bid.");
+            return;
+        }
+        if (bidAmount > me.money) {
+            alert("You cannot bid more money than you have.");
+            return;
+        }
         
         await updateDoc(doc(db, "games", roomId), {
             [`auction.bids.${currentPlayerId}`]: bidAmount,
@@ -1339,7 +1396,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
                             <label className="text-lg">Your Bid: ${bidAmount}</label>
                             <input
                                 type="range"
-                                min={(auction.currentBid || 0) + 1}
+                                min={auction.currentBid ? (auction.currentBid as number) + 1 : 0}
                                 max={me.money}
                                 value={bidAmount}
                                 onChange={(e) => setBidAmount(Number(e.target.value))}
@@ -1348,7 +1405,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
                         </div>
                         <input
                             type="number"
-                            min={(auction.currentBid || 0) + 1}
+                            min={auction.currentBid ? (auction.currentBid as number) + 1 : 0}
                             max={me.money}
                             value={bidAmount}
                             onChange={(e) => setBidAmount(Number(e.target.value))}
@@ -1383,8 +1440,8 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
     const trade = isViewing ? gameState.trades[tradeId] : null;
 
     const [tradePartnerId, setTradePartnerId] = useState<PlayerId>("");
-    const [offer, setOffer] = useState({ money: 0, properties: [] as PropertyId[], pardonCards: 0 });
-    const [request, setRequest] = useState({ money: 0, properties: [] as PropertyId[], pardonCards: 0 });
+    const [offer, setOffer] = useState({ money: 0, properties: [] as PropertyId[] });
+    const [request, setRequest] = useState({ money: 0, properties: [] as PropertyId[] });
 
     const me = gameState.players[currentPlayerId];
     const tradePartner = gameState.players[tradePartnerId];
@@ -1425,11 +1482,12 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
             const fromPlayer = gameData.players[trade.fromPlayer];
             const toPlayer = gameData.players[trade.toPlayer];
 
+            if (fromPlayer.money < trade.offer.money || toPlayer.money < trade.request.money) {
+                throw new Error("One of the players does not have enough money for this trade.");
+            }
+
             fromPlayer.money = fromPlayer.money - trade.offer.money + trade.request.money;
             toPlayer.money = toPlayer.money + trade.offer.money - trade.request.money;
-
-            fromPlayer.pardonCards = fromPlayer.pardonCards - trade.offer.pardonCards + trade.request.pardonCards;
-            toPlayer.pardonCards = toPlayer.pardonCards + trade.offer.pardonCards - trade.request.pardonCards;
 
             const propertyTypeMap: Record<string, 'cities' | 'airports' | 'harbours' | 'companies'> = {
                 'city': 'cities',
@@ -1495,7 +1553,6 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                             <div className="flex-1 border border-gray-600 p-4 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Offer</h3>
                                 <p>Money: ${trade.offer.money}</p>
-                                <p>Pardon Cards: {trade.offer.pardonCards}</p>
                                 <ul className="list-disc list-inside mt-2">
                                     {trade.offer.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
@@ -1503,7 +1560,6 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                             <div className="flex-1 border border-gray-600 p-4 rounded-lg">
                                 <h3 className="text-xl font-semibold mb-2 text-center">They Request</h3>
                                 <p>Money: ${trade.request.money}</p>
-                                <p>Pardon Cards: {trade.request.pardonCards}</p>
                                 <ul className="list-disc list-inside mt-2">
                                     {trade.request.properties.map(p => <li key={p}>{initialBoardState[p]?.name || 'Unknown Property'}</li>)}
                                 </ul>
@@ -1529,8 +1585,6 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                     <h3 className="text-xl font-semibold mb-2 text-center">Your Offer</h3>
                                     <label className="block mb-2">Money: ${offer.money}</label>
                                     <input type="range" min="0" max={me.money} value={offer.money} onChange={(e) => setOffer({...offer, money: Number(e.target.value)})} className="w-full" />
-                                    <label className="block mb-2">Pardon Cards: {offer.pardonCards}</label>
-                                    <input type="range" min="0" max={me.pardonCards} value={offer.pardonCards} onChange={(e) => setOffer({...offer, pardonCards: Number(e.target.value)})} className="w-full" />
                                     <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
                                         {getPlayerProperties(me).map(propId => (
                                             <label key={propId} className="flex items-center space-x-2">
@@ -1546,8 +1600,6 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
                                     <h3 className="text-xl font-semibold mb-2 text-center">Their Request</h3>
                                     <label className="block mb-2">Money: ${request.money}</label>
                                     <input type="range" min="0" max={tradePartner.money} value={request.money} onChange={(e) => setRequest({...request, money: Number(e.target.value)})} className="w-full" />
-                                    <label className="block mb-2">Pardon Cards: {request.pardonCards}</label>
-                                    <input type="range" min="0" max={tradePartner.pardonCards} value={request.pardonCards} onChange={(e) => setRequest({...request, pardonCards: Number(e.target.value)})} className="w-full" />
                                     <div className="h-40 overflow-y-auto mt-4 p-2 bg-gray-700 rounded">
                                         {getPlayerProperties(tradePartner).map(propId => (
                                             <label key={propId} className="flex items-center space-x-2">
@@ -1667,7 +1719,7 @@ interface VisitStatsModalProps {
 }
 
 const VisitStatsModal: FC<VisitStatsModalProps> = ({ gameState, onClose }) => {
-    const sortedVisits = Object.entries(gameState.propertyVisits || {}).sort(([, a], [, b]) => b - a);
+    const sortedVisits = Object.entries(gameState.propertyVisits || {}).sort(([, a], [, b]) => (b as number) - (a as number));
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
@@ -1737,12 +1789,12 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         // If the clicked popup is already active, close all popups.
         // Otherwise, open the clicked one.
         setActivePopups(prev => {
-            const isActive = !!prev[i];
+            const isActive = !!prev[String(i)];
             if (isActive) {
                 return {};
             } else {
-                const newActivePopups = { [i]: true };
-                popupTimers.current[i] = setTimeout(() => {
+                const newActivePopups = { [String(i)]: true };
+                popupTimers.current[String(i)] = setTimeout(() => {
                     setActivePopups({});
                 }, 10000);
                 return newActivePopups;
@@ -1751,7 +1803,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     };
 
 
-    const getGridPosition = (i: number): { gridArea: string } => {
+    const getGridPosition = (i: number): React.CSSProperties => {
         let row, col;
         if (i >= 0 && i <= 14) { row = 15; col = 15 - i; }
         else if (i >= 15 && i <= 28) { row = 15 - (i - 14); col = 1; }
@@ -1771,8 +1823,8 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     };
 
     const cells = Array.from({ length: 56 }, (_, i) => {
-        const cellInfo = initialBoardState[i] as CitySquare | UtilitySquare | TaxSquare | BaseSquare;
-        const cellState = boardState[i];
+        const cellInfo = initialBoardState[String(i)] as CitySquare | UtilitySquare | TaxSquare | BaseSquare;
+        const cellState = gameState.board[String(i)];
         const isCorner = [0, 14, 28, 42].includes(i);
         const hasColorBar = cellInfo.type === 'city';
         const flagSvg = hasColorBar ? countryFlags[(cellInfo as CitySquare).country] : null;
@@ -1822,7 +1874,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         <div className="absolute bottom-1 left-1 text-[10px] font-bold">Just Visiting</div>
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                             {Object.values(players).map(p => 
-                                p.position === i && !p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.animatedPosition === i && !p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
@@ -1830,7 +1882,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         IN JAIL
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                             {Object.values(players).map(p => 
-                                p.position === i && p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.animatedPosition === i && p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
@@ -1847,7 +1899,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     </div>
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                         {Object.values(players).map(p =>
-                            p.position === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                            p.animatedPosition === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                         )}
                     </div>
                 </div>
@@ -1871,11 +1923,11 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                 {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">調</div>}
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                     {Object.values(players).map(p => 
-                        p.position === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                        p.animatedPosition === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
-                {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
-                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[i] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
+                {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour' || cellInfo.type === 'company') && (
+                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[String(i)] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
                         <button onClick={(e) => { e.stopPropagation(); togglePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1895,7 +1947,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                                 </tbody>
                             </table>
                         )}
-                         {(cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
+                         {cellInfo.type === 'airport' && (
                              <table className="w-full text-left text-base mb-2">
                                 <tbody>
                                     <tr><td>1 Owned</td><td>${(cellInfo as UtilitySquare).rent[0]}</td></tr>
@@ -1904,6 +1956,22 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                                     <tr><td>4 Owned</td><td>${(cellInfo as UtilitySquare).rent[3]}</td></tr>
                                 </tbody>
                             </table>
+                        )}
+                        {cellInfo.type === 'harbour' && (
+                             <table className="w-full text-left text-base mb-2">
+                                <tbody>
+                                    <tr><td>1 Owned</td><td>$50</td></tr>
+                                    <tr><td>2 Owned</td><td>$100</td></tr>
+                                    <tr><td>3 Owned</td><td>$150</td></tr>
+                                    <tr><td>4 Owned</td><td>$200</td></tr>
+                                </tbody>
+                            </table>
+                        )}
+                        {cellInfo.type === 'company' && (
+                            <>
+                                <p className="text-sm font-semibold">Rent with 1 owned: 4x Dice Roll</p>
+                                <p className="text-sm font-semibold">Rent with 2 owned: 10x Dice Roll</p>
+                            </>
                         )}
                         {isMyProperty && (
                             <>
@@ -1995,12 +2063,21 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const [showStatsModal, setShowStatsModal] = useState(false);
     const [showVisitStatsModal, setShowVisitStatsModal] = useState(false);
     const [showCardPopup, setShowCardPopup] = useState(false);
+    const [isAnimating, setIsAnimating] = useState(false);
+    const lastPlayerPositionRef = useRef<number | undefined>(undefined);
 
     useEffect(() => {
         const gameRef = doc(db, "games", roomId);
         const unsubscribe = onSnapshot(gameRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as GameState;
+                const currentPlayer = data.players[currentPlayerId];
+                if (currentPlayer) {
+                    if (lastPlayerPositionRef.current === undefined) {
+                        data.players[currentPlayerId].animatedPosition = currentPlayer.position;
+                    }
+                    lastPlayerPositionRef.current = currentPlayer.position;
+                }
                 setGameState(data);
                 if (data.drawnCard) {
                     setShowCardPopup(true);
@@ -2010,11 +2087,51 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             }
         });
         return () => unsubscribe();
-    }, [roomId]);
+    }, [roomId, currentPlayerId]);
     
     useEffect(() => {
         setHasRolled(false);
     }, [gameState?.currentPlayerTurn]);
+
+    // Player animation logic
+    useEffect(() => {
+        if (!gameState) return;
+        
+        const currentPlayer = gameState.players[currentPlayerId];
+        if (!currentPlayer || currentPlayer.position === currentPlayer.animatedPosition || isAnimating) return;
+    
+        setIsAnimating(true);
+        
+        const animateMove = async () => {
+            let currentAnimatedPosition = currentPlayer.animatedPosition;
+            const finalPosition = currentPlayer.position;
+    
+            while (currentAnimatedPosition !== finalPosition) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                currentAnimatedPosition = (currentAnimatedPosition + 1) % 56;
+    
+                setGameState(prev => {
+                    if (!prev) return prev;
+                    const newPlayers = {
+                        ...prev.players,
+                        [currentPlayerId]: {
+                            ...prev.players[currentPlayerId],
+                            animatedPosition: currentAnimatedPosition
+                        }
+                    };
+                    return { ...prev, players: newPlayers };
+                });
+            }
+            setIsAnimating(false);
+            const updatedGameDoc = await getDoc(doc(db, "games", roomId));
+            if (updatedGameDoc.exists()) {
+                const updatedGameState = updatedGameDoc.data() as GameState;
+                await handleLandingOnSquare(roomId, currentPlayerId, finalPosition, 0, updatedGameState);
+            }
+        };
+
+        animateMove();
+    }, [gameState?.players[currentPlayerId]?.position, currentPlayerId, roomId, isAnimating, gameState]);
 
     const handleStartGame = async () => {
         if (!gameState || gameState.hostId !== currentPlayerId) return alert("Only the admin can start the game.");
@@ -2033,38 +2150,35 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         if (!gameState || gameState.currentPlayerTurn !== currentPlayerId) return alert("It's not your turn!");
         const player = gameState.players[currentPlayerId];
     
-        if (player.onVacation) {
-            alert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
-            return;
-        }
-
         if (player.inJail) {
             const die1 = Math.floor(Math.random() * 6) + 1;
             const die2 = Math.floor(Math.random() * 6) + 1;
+            const diceRoll = die1 + die2;
             const isDoubles = die1 === die2;
+            let logMessage = `${player.name} rolled a ${die1} and a ${die2}.`;
     
             if (isDoubles) {
+                logMessage += ' Doubles! You are free from jail!';
                 await updateDoc(doc(db, "games", roomId), {
                     [`players.${currentPlayerId}.inJail`]: false,
-                    [`players.${currentPlayerId}.jailTurns`]: 0,
-                    gameLog: arrayUnion(`${player.name} rolled doubles and got out of jail!`)
+                    [`players.${currentPlayerId}.position`]: (player.position + diceRoll) % 56,
+                    [`players.${currentPlayerId}.animatedPosition`]: (player.position + diceRoll) % 56,
+                    gameLog: arrayUnion(logMessage)
                 });
+                setHasRolled(true);
             } else {
-                if (player.jailTurns >= 2) {
-                    await updateDoc(doc(db, "games", roomId), {
-                        [`players.${currentPlayerId}.inJail`]: false,
-                        [`players.${currentPlayerId}.jailTurns`]: 0,
-                        [`players.${currentPlayerId}.money`]: increment(-gameState.jailFine),
-                        gameLog: arrayUnion(`${player.name} did not roll doubles, paid the fine of $${gameState.jailFine}, and got out of jail.`)
-                    });
-                } else {
-                    await updateDoc(doc(db, "games", roomId), {
-                        [`players.${currentPlayerId}.jailTurns`]: increment(1),
-                        gameLog: arrayUnion(`${player.name} is in jail and did not roll doubles.`)
-                    });
-                }
+                logMessage += ' You did not roll doubles. Your turn ends.';
+                await updateDoc(doc(db, "games", roomId), {
+                    [`players.${currentPlayerId}.jailTurns`]: increment(1),
+                    gameLog: arrayUnion(logMessage)
+                });
+                await handleEndTurn();
             }
-            setHasRolled(true);
+            return;
+        }
+
+        if (player.onVacation) {
+            alert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
             return;
         }
     
@@ -2092,7 +2206,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             [`players.${currentPlayerId}.doublesCount`]: doublesCount,
         };
         
-        const logMessages = [`${player.name} rolled a ${diceRoll}${isDoubles ? ' (doubles!)' : ''}.`];
+        const logMessages = [`${player.name} rolled a ${die1} and a ${die2}.`];
     
         if (newPosition < oldPosition && newPosition !== 0 && !player.inJail) {
             updates[`players.${currentPlayerId}.money`] = increment(200);
@@ -2103,41 +2217,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     
         await updateDoc(doc(db, "games", roomId), updates);
         
-        // Fetch the updated game state to pass to handleLandingOnSquare
-        const updatedGameDoc = await getDoc(doc(db, "games", roomId));
-        if (updatedGameDoc.exists()) {
-            const updatedGameState = updatedGameDoc.data() as GameState;
-            await handleLandingOnSquare(roomId, currentPlayerId, newPosition, diceRoll, updatedGameState);
-        }
-    
         setHasRolled(true);
-    };
-
-    const payJailFine = async () => {
-        if (!gameState || !gameState.players[currentPlayerId].inJail) return;
-        const player = gameState.players[currentPlayerId];
-        const fine = gameState.jailFine;
-        if (player.money < fine) return alert("Not enough money to pay the fine!");
-
-        await updateDoc(doc(db, "games", roomId), {
-            [`players.${currentPlayerId}.money`]: increment(-fine),
-            [`players.${currentPlayerId}.inJail`]: false,
-            [`players.${currentPlayerId}.jailTurns`]: 0,
-            gameLog: arrayUnion(`${player.name} paid $${fine} to get out of jail.`)
-        });
-    };
-    
-    const usePardonCard = async () => {
-        if (!gameState || !gameState.players[currentPlayerId].inJail) return;
-        const player = gameState.players[currentPlayerId];
-        if (player.pardonCards <= 0) return alert("You don't have a pardon card!");
-    
-        await updateDoc(doc(db, "games", roomId), {
-            [`players.${currentPlayerId}.pardonCards`]: increment(-1),
-            [`players.${currentPlayerId}.inJail`]: false,
-            [`players.${currentPlayerId}.jailTurns`]: 0,
-            gameLog: arrayUnion(`${player.name} used a pardon card to get out of jail.`)
-        });
     };
 
     const handleEndTurn = async () => {
@@ -2154,6 +2234,15 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
             [`players.${currentPlayerTurn}.doublesCount`]: 0,
             gameLog: arrayUnion(`${player.name}'s turn ended.`)
         };
+
+        if (player.inJail) {
+            if (player.jailTurns >= 3) {
+                updates[`players.${currentPlayerTurn}.inJail`] = false;
+                updates.gameLog = arrayUnion(`${player.name} is free from jail after 3 turns.`)
+            } else {
+                updates[`players.${currentPlayerTurn}.jailTurns`] = increment(1);
+            }
+        }
     
         if (turnOrder.length > 1) {
             const currentIndex = turnOrder.indexOf(currentPlayerTurn);
@@ -2213,10 +2302,11 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         );
     }
 
-    const currentSquareInfo = initialBoardState[me.position];
-    const currentSquareState = gameState.board[me.position];
+    const currentSquareInfo = initialBoardState[String(me.position)];
+    const currentSquareState = gameState.board[String(me.position)];
     const canBuy = ['city', 'airport', 'harbour', 'company'].includes(currentSquareInfo?.type) && !currentSquareState?.owner;
     const amIOnTurn = gameState.currentPlayerTurn === currentPlayerId;
+    const jailFine = gameState.settings.increasingJailFine ? 100 + ((gameState.jailCount?.[currentPlayerId] || 0) - 1) * 20 : 100;
 
     return (
         <div className="max-w-[1500px] mx-auto">
@@ -2246,6 +2336,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                                 <div>
                                     <strong>{p.name} {p.id === currentPlayerId ? '(You)' : ''}</strong>
                                     <p className="text-sm">Money: ${p.money}</p>
+                                    {p.inJail && <p className="text-red-400 text-xs">In Jail (Turn {p.jailTurns + 1})</p>}
                                 </div>
                             </div>
                         ))}
@@ -2254,27 +2345,24 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                     <h2 className="text-xl font-semibold mb-2">Your Turn</h2>
                     {amIOnTurn && gameState.status === 'in-progress' && (
                         <div className="grid grid-cols-2 gap-2 mb-4">
-                            {!hasRolled && !me.onVacation && (
-                                 <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                                 {me.inJail ? `Roll for Doubles (Turns: ${me.jailTurns})` : (me.doublesCount > 0 ? "Roll Again" : "Roll Dice")}
-                             </button>
+                            {!me.inJail && !hasRolled && !me.onVacation && (
+                                <button onClick={handleRollDice} disabled={isAnimating} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                    {me.doublesCount > 0 ? "Roll Again" : "Roll Dice"}
+                                </button>
+                            )}
+                            {me.inJail && !hasRolled && (
+                                <>
+                                    <p className="col-span-2 text-center text-yellow-400">You are in Jail. Turn {me.jailTurns + 1} of 3</p>
+                                    <button onClick={handleRollDice} disabled={isAnimating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll for Doubles</button>
+                                    <button onClick={() => payJailFine(roomId, currentPlayerId, gameState)} disabled={me.money < jailFine} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Pay ${jailFine} Fine</button>
+                                    <button onClick={() => usePardonCard(roomId, currentPlayerId, gameState)} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">Use Get Out of Jail Free Card</button>
+                                </>
                             )}
                             {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
 
-                            {me.inJail && (
+                            {hasRolled && !me.onVacation && !me.inJail && (
                                 <>
-                                    <button onClick={payJailFine} disabled={me.money < gameState.jailFine} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">
-                                        Pay ${gameState.jailFine}
-                                    </button>
-                                    <button onClick={usePardonCard} disabled={me.pardonCards <= 0} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500">
-                                        Use Pardon Card ({me.pardonCards})
-                                    </button>
-                                </>
-                            )}
-
-                            {hasRolled && !me.onVacation && (
-                                <>
-                                    {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo.name})</button>}
+                                    {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo?.name})</button>}
                                     {canBuy && <button onClick={() => startAuction(roomId, String(me.position))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
                                     
                                     {me.doublesCount === 0 ? (
