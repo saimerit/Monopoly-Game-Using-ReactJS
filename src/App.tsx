@@ -52,6 +52,7 @@ interface AuctionState {
     bidCount?: number;
     sellerId?: PlayerId | null; // For player-hosted auctions
     log: string[];
+    bids: Record<PlayerId, number>;
 }
 
 interface Trade {
@@ -631,6 +632,7 @@ const startAuction = async (roomId: RoomId, propertyId: PropertyId, sellerId: Pl
             bidCount: 0,
             sellerId: sellerId,
             log: [`Auction started for ${property.name}!`],
+            bids: {}
         },
     });
 };
@@ -735,6 +737,39 @@ const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition:
         [`board.${propertyPosition}.owner`]: playerId,
         gameLog: arrayUnion(`${player.name} bought ${property.name} for $${property.cost}.`)
     });
+};
+
+const sellProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+    const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
+    const propertyState = gameState.board[propertyId];
+
+    if (propertyState.houses > 0 || propertyState.hotels > 0) {
+        alert("You must sell all houses and hotels before selling the property.");
+        return;
+    }
+    if (propertyState.mortgaged) {
+        alert("You must unmortgage the property before selling it.");
+        return;
+    }
+    if (propertyState.owner !== playerId) return;
+
+    const sellValue = propertyInfo.cost / 2;
+    const player = gameState.players[playerId];
+
+    const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
+    const ownershipArray = propertyTypeMap[propertyInfo.type] as 'cities' | 'airports' | 'harbours' | 'companies';
+
+    const updates: DocumentData = {
+        [`players.${playerId}.money`]: increment(sellValue),
+        [`board.${propertyId}.owner`]: null,
+        gameLog: arrayUnion(`${player.name} sold ${propertyInfo.name} back to the bank for $${sellValue}.`)
+    };
+
+    if (player[ownershipArray].includes(propertyId)) {
+        updates[`players.${playerId}.${ownershipArray}`] = player[ownershipArray].filter(p => p !== propertyId);
+    }
+    
+    await updateDoc(doc(db, "games", roomId), updates);
 };
 
 const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
@@ -1079,7 +1114,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
             currentPlayerTurn: currentPlayerId,
             gameLog: [`Game created by ${playerName}.`],
             vacationPot: 0,
-            auction: { active: false, log: [] },
+            auction: { active: false, log: [], bids: {} },
             trades: {},
             propertyVisits: {}
         };
@@ -1183,52 +1218,59 @@ interface ModalProps {
 }
 
 const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) => {
-    const [timer, setTimer] = useState(5);
+    const [timer, setTimer] = useState(10);
+    const [bidAmount, setBidAmount] = useState<number>(0);
     const { auction } = gameState;
     const property = auction.propertyId ? initialBoardState[auction.propertyId] as CitySquare | UtilitySquare : null;
     const me = gameState.players[currentPlayerId];
+    const isSeller = auction.sellerId === currentPlayerId;
+    const hasBid = !!auction.bids[currentPlayerId];
 
     const endAuction = useCallback(async () => {
         if (!property) return;
-        const { highestBidder, currentBid, propertyId, sellerId } = auction;
+        const gameRef = doc(db, "games", roomId);
         const updates: DocumentData = { "auction.active": false };
         let logMessage = "";
-        
-        if (highestBidder && currentBid && propertyId) {
-            const winner = gameState.players[highestBidder];
+
+        const finalBids = Object.entries(auction.bids || {}).sort(([, a], [, b]) => b - a);
+
+        if (finalBids.length > 0) {
+            const [highestBidderId, finalBidAmount] = finalBids[0];
+            const winner = gameState.players[highestBidderId];
             const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
             const ownershipArray = propertyTypeMap[property.type] as 'cities' | 'airports' | 'harbours' | 'companies';
 
-            updates[`players.${highestBidder}.money`] = increment(-currentBid);
-            updates[`players.${highestBidder}.${ownershipArray}`] = arrayUnion(String(propertyId));
-            updates[`board.${propertyId}.owner`] = highestBidder;
+            updates["auction.currentBid"] = finalBidAmount;
+            updates["auction.highestBidder"] = highestBidderId;
 
-            if (sellerId) {
-                const sellerGets = Math.floor(currentBid * 0.9);
-                const tax = currentBid - sellerGets;
-                updates[`players.${sellerId}.money`] = increment(sellerGets);
+            updates[`players.${highestBidderId}.money`] = increment(-finalBidAmount);
+            updates[`players.${highestBidderId}.${ownershipArray}`] = arrayUnion(String(property.name));
+            updates[`board.${property.name}.owner`] = highestBidderId;
+
+            if (auction.sellerId) {
+                const sellerGets = Math.floor(finalBidAmount * 0.9);
+                const tax = finalBidAmount - sellerGets;
+                updates[`players.${auction.sellerId}.money`] = increment(sellerGets);
                 if (gameState.settings.taxInVacationPot) {
                     updates.vacationPot = increment(tax);
                 }
-                logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[sellerId]?.name || 'Unknown'} with a bid of $${currentBid}!`;
+                logMessage = `${winner.name} won the auction for ${property.name} from ${gameState.players[auction.sellerId]?.name || 'Unknown'} with a bid of $${finalBidAmount}!`;
             } else {
-                logMessage = `${winner.name} won the auction for ${property.name} with a bid of $${currentBid}!`;
+                logMessage = `${winner.name} won the auction for ${property.name} with a bid of $${finalBidAmount}!`;
             }
 
         } else {
             logMessage = `Auction for ${property.name} ended with no bids.`;
         }
         updates.gameLog = arrayUnion(logMessage);
-        await updateDoc(doc(db, "games", roomId), updates);
+        await updateDoc(gameRef, updates);
     }, [auction, gameState.players, roomId, property]);
 
 
     useEffect(() => {
-        setTimer(5);
-    }, [auction.bidCount]);
-
-    useEffect(() => {
         if (!auction.active) return;
+        setBidAmount(auction.currentBid || 0);
+        setTimer(10);
         const interval = setInterval(() => {
             setTimer(prev => {
                 if (prev <= 1) {
@@ -1242,46 +1284,86 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             });
         }, 1000);
         return () => clearInterval(interval);
-    }, [auction.active, auction.bidCount, gameState.hostId, currentPlayerId, endAuction]);
+    }, [auction.active, gameState.hostId, currentPlayerId, endAuction, auction.bidCount]);
     
     if (!property) return null;
 
-    const placeBid = async (amount: number) => {
-        if (!auction.currentBid) return;
-        const newBid = auction.currentBid + amount;
-        if (me.money < newBid) return; // Button should be disabled, but as a safeguard
+    const placeBid = async () => {
+        if (isSeller || hasBid) return;
+        if (bidAmount <= (auction.currentBid || 0)) return alert("Your bid must be higher than the current highest bid.");
+        if (bidAmount > me.money) return alert("You cannot bid more money than you have.");
+        
         await updateDoc(doc(db, "games", roomId), {
-            "auction.currentBid": newBid,
-            "auction.highestBidder": currentPlayerId,
-            "auction.bidCount": increment(1),
-            "auction.log": arrayUnion(`${me.name} bid $${newBid}.`)
+            [`auction.bids.${currentPlayerId}`]: bidAmount,
+            [`auction.log`]: arrayUnion(`${me.name} placed a bid.`),
+            [`auction.bidCount`]: increment(1),
+            "auction.currentBid": bidAmount,
+            "auction.highestBidder": currentPlayerId
         });
     };
+
+    const bidsVisible = timer <= 0;
+    const highestBidderName = bidsVisible ? (gameState.players[auction.highestBidder || '']?.name || 'None') : 'Hidden';
+    const highestBidAmount = bidsVisible ? auction.currentBid : 'Hidden';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
             <div className="bg-gray-800 p-8 rounded-lg border border-gray-600 text-center shadow-xl w-1/2">
                 <h2 className="text-3xl font-bold mb-4">Auction for {property.name}</h2>
                 {auction.sellerId && <p className="text-lg text-gray-400 mb-4">Auctioned by {gameState.players[auction.sellerId]?.name}</p>}
-                <h3 className="text-2xl mb-2">Current Bid: ${auction.currentBid}</h3>
-                <p className="mb-4">Highest Bidder: {gameState.players[auction.highestBidder || '']?.name || 'None'}</p>
+                
+                <h3 className="text-2xl mb-2">Current Bid: ${highestBidAmount}</h3>
+                <p className="mb-4">Highest Bidder: {highestBidderName}</p>
+                
                 <div className="bg-gray-900 p-4 rounded-lg mb-4 h-48 overflow-y-auto">
                     {auction.log && auction.log.map((log, index) => <p key={index}>{log}</p>)}
                 </div>
-                <h3 className="text-4xl font-mono mb-6">Selling in: {timer}</h3>
-                <div className="flex justify-center gap-6">
-                    <button onClick={() => placeBid(10)} disabled={me.money < (auction.currentBid || 0) + 10} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded disabled:bg-gray-500">+$10</button>
-                    <button onClick={() => placeBid(50)} disabled={me.money < (auction.currentBid || 0) + 50} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded disabled:bg-gray-500">+$50</button>
-                    <button onClick={() => placeBid(100)} disabled={me.money < (auction.currentBid || 0) + 100} className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded disabled:bg-gray-500">+$100</button>
-                </div>
+                
+                <h3 className="text-4xl font-mono mb-6">Time Left: {timer}</h3>
+
+                {!isSeller && !hasBid && (
+                    <div className="flex flex-col gap-4">
+                        <div className="flex items-center gap-4">
+                            <label className="text-lg">Your Bid: ${bidAmount}</label>
+                            <input
+                                type="range"
+                                min={(auction.currentBid || 0) + 1}
+                                max={me.money}
+                                value={bidAmount}
+                                onChange={(e) => setBidAmount(Number(e.target.value))}
+                                className="w-full"
+                            />
+                        </div>
+                        <input
+                            type="number"
+                            min={(auction.currentBid || 0) + 1}
+                            max={me.money}
+                            value={bidAmount}
+                            onChange={(e) => setBidAmount(Number(e.target.value))}
+                            className="w-full p-2 bg-gray-700 border border-gray-500 rounded text-white"
+                        />
+                        <button
+                            onClick={placeBid}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded disabled:bg-gray-500 disabled:cursor-not-allowed"
+                            disabled={hasBid || isSeller || bidAmount <= (auction.currentBid || 0) || bidAmount > me.money}
+                        >
+                            Place Bid
+                        </button>
+                    </div>
+                )}
+                {hasBid && !bidsVisible && <p className="text-green-400">You have placed your bid. Waiting for the auction to end.</p>}
+                {isSeller && <p className="text-yellow-400">You cannot bid on your own property.</p>}
             </div>
         </div>
     );
 };
 
-interface TradeModalProps extends ModalProps {
+interface TradeModalProps {
     tradeId?: string;
     setShowTradeModal: (show: string | null) => void;
+    gameState: GameState;
+    roomId: RoomId;
+    currentPlayerId: PlayerId;
 }
 
 function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeModal }: TradeModalProps) {
@@ -1717,17 +1799,17 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                 <div key={i} className="bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center font-bold text-sm" style={getGridPosition(i)}>
                     <div className="w-full h-full relative">
                         <div className="absolute bottom-1 left-1 text-[10px] font-bold">Just Visiting</div>
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                             {Object.values(players).map(p => 
-                                p.position === i && !p.inJail && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.position === i && !p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
                     <div className="absolute top-1 right-1 w-3/5 h-3/5 bg-red-800 bg-opacity-50 text-white flex justify-center items-center text-xs font-bold border border-red-500">
                         IN JAIL
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                             {Object.values(players).map(p => 
-                                p.position === i && p.inJail && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.position === i && p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
@@ -1742,9 +1824,9 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
                         <div className="text-sm font-bold pb-1">${gameState.vacationPot || 0}</div>
                     </div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                         {Object.values(players).map(p =>
-                            p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                            p.position === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                         )}
                     </div>
                 </div>
@@ -1766,9 +1848,9 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     )}
                 </div>
                 {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">調</div>}
-                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-0.5 w-12 justify-center">
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                     {Object.values(players).map(p => 
-                        p.position === i && <div key={p.id} className="w-4 h-4 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                        p.position === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
                 {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour') && (
@@ -1815,6 +1897,13 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                                         <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">Build</button>
                                         <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm">Sell</button>
                                     </div>
+                                )}
+                                {cellState && !cellState.mortgaged && cellState.houses === 0 && cellState.hotels === 0 && (
+                                    <button 
+                                        onClick={() => sellProperty(roomId, currentPlayerId, String(i), gameState)} 
+                                        className="w-full text-center py-1 bg-red-600 hover:bg-red-700 rounded mb-1 text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                        Sell Property
+                                    </button>
                                 )}
                                 <button 
                                     onClick={() => startAuction(roomId, String(i), currentPlayerId)} 
