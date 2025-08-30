@@ -752,7 +752,7 @@ const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState: GameSt
     });
 };
 
-const usePardonCard = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
+const handleUsePardonCard = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
     const gameRef = doc(db, "games", roomId);
     const player = gameState.players[playerId];
 
@@ -1311,8 +1311,8 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             updates[`board.${auction.propertyId}.owner`] = highestBidderId;
 
             if (auction.sellerId) {
-                const sellerGets = Math.floor((finalBidAmount as number) * 0.9);
-                const tax = (finalBidAmount as number) - sellerGets;
+                const tax = Math.floor((finalBidAmount as number) * 0.1);
+                const sellerGets = (finalBidAmount as number) - tax;
                 updates[`players.${auction.sellerId}.money`] = increment(sellerGets);
                 if (gameState.settings.taxInVacationPot) {
                     updates.vacationPot = increment(tax);
@@ -1327,7 +1327,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         }
         updates.gameLog = arrayUnion(logMessage);
         await updateDoc(gameRef, updates);
-    }, [auction, gameState.players, roomId, property]);
+    }, [auction, gameState.players, roomId, property, gameState.settings.taxInVacationPot]);
 
 
     useEffect(() => {
@@ -1370,18 +1370,34 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
             "auction.highestBidder": currentPlayerId
         });
     };
-
-    const bidsVisible = timer <= 0;
-    const highestBidderName = bidsVisible ? (gameState.players[auction.highestBidder || '']?.name || 'None') : 'Hidden';
-    const highestBidAmount = bidsVisible ? auction.currentBid : 'Hidden';
+    
+    const handleCloseAuction = async () => {
+        if (currentPlayerId === gameState.hostId && Object.keys(auction.bids).length === 0) {
+            await updateDoc(doc(db, "games", roomId), {
+                "auction.active": false,
+                gameLog: arrayUnion(`Auction for ${property.name} was cancelled.`)
+            });
+        }
+    };
+    
+    const highestBidderName = gameState.players[auction.highestBidder || '']?.name || 'None';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
-            <div className="bg-gray-800 p-8 rounded-lg border border-gray-600 text-center shadow-xl w-1/2">
+            <div className="bg-gray-800 p-8 rounded-lg border border-gray-600 text-center shadow-xl w-1/2 relative">
+                <button 
+                    onClick={handleCloseAuction} 
+                    className="absolute top-2 right-2 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={currentPlayerId !== gameState.hostId || Object.keys(auction.bids).length > 0}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
                 <h2 className="text-3xl font-bold mb-4">Auction for {property.name}</h2>
                 {auction.sellerId && <p className="text-lg text-gray-400 mb-4">Auctioned by {gameState.players[auction.sellerId]?.name}</p>}
                 
-                <h3 className="text-2xl mb-2">Current Bid: ${highestBidAmount}</h3>
+                <h3 className="text-2xl mb-2">Current Bid: ${auction.currentBid}</h3>
                 <p className="mb-4">Highest Bidder: {highestBidderName}</p>
                 
                 <div className="bg-gray-900 p-4 rounded-lg mb-4 h-48 overflow-y-auto">
@@ -1420,7 +1436,7 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
                         </button>
                     </div>
                 )}
-                {hasBid && !bidsVisible && <p className="text-green-400">You have placed your bid. Waiting for the auction to end.</p>}
+                {hasBid && <p className="text-green-400">You have placed your bid. Waiting for the auction to end.</p>}
                 {isSeller && <p className="text-yellow-400">You cannot bid on your own property.</p>}
             </div>
         </div>
@@ -1777,7 +1793,7 @@ const CardPopup: FC<CardPopupProps> = ({ card, onClose }) => {
 };
 
 const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
-    const { players, board: boardState } = gameState;
+    const { players } = gameState;
     const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
     const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -2094,6 +2110,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     }, [gameState?.currentPlayerTurn]);
 
     // Player animation logic
+    const currentPlayerPosition = gameState?.players[currentPlayerId]?.position;
     useEffect(() => {
         if (!gameState) return;
         
@@ -2131,7 +2148,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         };
 
         animateMove();
-    }, [gameState?.players[currentPlayerId]?.position, currentPlayerId, roomId, isAnimating, gameState]);
+    }, [currentPlayerPosition, currentPlayerId, roomId, isAnimating, gameState]);
 
     const handleStartGame = async () => {
         if (!gameState || gameState.hostId !== currentPlayerId) return alert("Only the admin can start the game.");
@@ -2355,7 +2372,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
                                     <p className="col-span-2 text-center text-yellow-400">You are in Jail. Turn {me.jailTurns + 1} of 3</p>
                                     <button onClick={handleRollDice} disabled={isAnimating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll for Doubles</button>
                                     <button onClick={() => payJailFine(roomId, currentPlayerId, gameState)} disabled={me.money < jailFine} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Pay ${jailFine} Fine</button>
-                                    <button onClick={() => usePardonCard(roomId, currentPlayerId, gameState)} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">Use Get Out of Jail Free Card</button>
+                                    <button onClick={() => handleUsePardonCard(roomId, currentPlayerId, gameState)} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded">Use Get Out of Jail Free Card</button>
                                 </>
                             )}
                             {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
