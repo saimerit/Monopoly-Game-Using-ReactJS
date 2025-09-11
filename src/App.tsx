@@ -7,6 +7,9 @@ import {
     writeBatch
 } from "firebase/firestore";
 import type { DocumentData, Transaction } from "firebase/firestore";
+import Auth from './Auth';
+import Leaderboard from './Leaderboard';
+import { type User } from "firebase/auth";
 
 // Value imports from gameLogic
 import {
@@ -25,7 +28,6 @@ import type {
     Trade, Card, CitySquare, UtilitySquare, TaxSquare,
     BaseSquare
 } from './gameLogic.tsx';
-
 
 // ==========================================================
 // WIDGET COMPONENTS
@@ -158,50 +160,24 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, 
     );
 };
 // ==========================================================
-// REACT COMPONENTS
+// PAGE & MAJOR GAME COMPONENTS
 // ==========================================================
-const App: FC = () => {
-    const [page, setPage] = useState('lobby');
-    const [roomId, setRoomId] = useState<RoomId | null>(null);
-    const [playerId] = useState<PlayerId>(() => localStorage.getItem("monopolyPlayerId") || `p_${Date.now()}`);
-
-    useEffect(() => {
-        localStorage.setItem("monopolyPlayerId", playerId);
-        const path = window.location.pathname;
-        if (path.startsWith('/game/')) {
-            setRoomId(path.split('/game/')[1].toUpperCase());
-            setPage('game');
-        } else if (path === '/admin') {
-            setPage('admin');
-        }
-    }, [playerId]);
-
-    const renderPage = () => {
-        switch (page) {
-            case 'game':
-                return roomId ? <GameRoom roomId={roomId} currentPlayerId={playerId} /> : <div>Invalid Game Room</div>;
-            case 'admin':
-                return <AdminDashboard />;
-            default:
-                return <Lobby currentPlayerId={playerId} />;
-        }
-    };
-
-    return (
-        <div className="bg-gray-900 text-gray-200 min-h-screen p-5 font-sans">
-            {renderPage()}
-        </div>
-    );
-};
 
 interface LobbyProps {
     currentPlayerId: PlayerId;
+    user: User | null;
 }
 
-const Lobby: FC<LobbyProps> = ({ currentPlayerId }) => {
-    const [playerName, setPlayerName] = useState("");
+const Lobby: FC<LobbyProps> = ({ currentPlayerId, user }) => {
+    const [playerName, setPlayerName] = useState(user?.displayName || "");
     const [joinRoomId, setJoinRoomId] = useState("");
     const maxPlayers = 8;
+
+    useEffect(() => {
+        if (user) {
+            setPlayerName(user.displayName || "");
+        }
+    }, [user]);
 
     const handleCreateGame = async () => {
         if (!playerName) return alert("Please enter your name.");
@@ -376,7 +352,6 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
         if (!property || !auction.propertyId) return;
         const gameRef = doc(db, "games", roomId);
         
-        // Fetch the latest game state to avoid race conditions
         const latestGameDoc = await getDoc(gameRef);
         if (!latestGameDoc.exists()) return;
         const latestGameState = latestGameDoc.data() as GameState;
@@ -902,12 +877,9 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
 
     const togglePopup = (i: number) => {
-        // Clear any existing timers
         Object.values(popupTimers.current).forEach(clearTimeout);
         popupTimers.current = {};
     
-        // If the clicked popup is already active, close all popups.
-        // Otherwise, open the clicked one.
         setActivePopups(prev => {
             const isActive = !!prev[String(i)];
             if (isActive) {
@@ -1225,7 +1197,6 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         setHasRolled(false);
     }, [gameState?.currentPlayerTurn]);
 
-    // This effect now correctly handles the logic for when a player lands on a square.
     useEffect(() => {
         if (hasRolled) {
             const handleLanding = async () => {
@@ -1305,7 +1276,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     
         if (doublesCount === 3) {
             await goToJail(roomId, currentPlayerId, gameState);
-            setHasRolled(true); // End movement phase after going to jail
+            setHasRolled(true);
             return;
         }
     
@@ -1525,7 +1496,7 @@ const AdminDashboard: FC = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     const handleAdminLogin = () => {
-        if (password === "admin123") { // Replace with a more secure method in a real app
+        if (password === "admin123") {
             setIsAuthenticated(true);
         } else {
             alert("Incorrect password.");
@@ -1561,7 +1532,7 @@ const AdminDashboard: FC = () => {
                 });
                 await batch.commit();
                 alert("All games have been wiped out.");
-                fetchGames(); // Refresh the list
+                fetchGames();
             } catch (error) {
                 console.error("Error wiping games:", error);
                 alert("Failed to wipe games.");
@@ -1620,6 +1591,66 @@ const AdminDashboard: FC = () => {
                     </div>
                 )) : <p className="col-span-full text-center text-gray-400">No active games found.</p>}
             </div>
+        </div>
+    );
+};
+
+
+const App: FC = () => {
+    const [page, setPage] = useState('lobby');
+    const [roomId, setRoomId] = useState<RoomId | null>(null);
+    const [playerId, setPlayerId] = useState<PlayerId>(() => localStorage.getItem("monopolyPlayerId") || `p_${Date.now()}`);
+    const [user, setUser] = useState<User | null>(null);
+
+    useEffect(() => {
+        const storedPlayerId = localStorage.getItem("monopolyPlayerId");
+        if (storedPlayerId) {
+            setPlayerId(storedPlayerId);
+        }
+    }, []);
+
+    const handleLogin = (loggedInUser: User) => {
+        setUser(loggedInUser);
+        const newPlayerId = loggedInUser.uid;
+        setPlayerId(newPlayerId);
+        localStorage.setItem("monopolyPlayerId", newPlayerId);
+    };
+
+    const handleLogout = () => {
+        setUser(null);
+        const newPlayerId = `p_${Date.now()}`;
+        setPlayerId(newPlayerId);
+        localStorage.setItem("monopolyPlayerId", newPlayerId);
+    };
+
+    useEffect(() => {
+        const path = window.location.pathname;
+        if (path.startsWith('/game/')) {
+            setRoomId(path.split('/game/')[1].toUpperCase());
+            setPage('game');
+        } else if (path === '/admin') {
+            setPage('admin');
+        }
+    }, []);
+
+    const renderPage = () => {
+        switch (page) {
+            case 'game':
+                return roomId ? <GameRoom roomId={roomId} currentPlayerId={playerId} /> : <div>Invalid Game Room</div>;
+            case 'admin':
+                return <AdminDashboard />;
+            default:
+                return <Lobby currentPlayerId={playerId} user={user} />;
+        }
+    };
+
+    return (
+        <div className="bg-gray-900 text-gray-200 min-h-screen p-5 font-sans">
+            <div className="relative">
+               <Auth onLogin={handleLogin} onLogout={handleLogout} />
+               <Leaderboard />
+            </div>
+            {renderPage()}
         </div>
     );
 };

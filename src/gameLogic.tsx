@@ -6,6 +6,7 @@ import {
 } from "firebase/firestore";
 import type { DocumentData } from "firebase/firestore";
 import type { ReactNode } from 'react';
+import { collection, getDocs, query, orderBy, limit, runTransaction } from "firebase/firestore";
 
 // ==========================================================
 // TYPE DEFINITIONS
@@ -127,6 +128,11 @@ export interface TaxSquare extends BaseSquare {
 }
 
 export type BoardSquare = BaseSquare | CitySquare | UtilitySquare | TaxSquare;
+
+export interface LeaderboardEntry {
+    name: string;
+    wins: number;
+}
 
 // ==========================================================
 // CONSTANTS & HELPERS
@@ -579,9 +585,40 @@ export const handleBankruptcy = async (roomId: RoomId, playerId: PlayerId, gameS
         updates.status = 'finished';
         updates.winner = winnerId;
         updates.gameLog = arrayUnion(`The game is over! ${winnerName} is the winner!`);
+
+        if (!winnerId.startsWith('p_')) {
+            await updateLeaderboard(winnerId);
+        }
     }
 
     await updateDoc(gameRef, updates);
+};
+
+export const updateLeaderboard = async (winnerId: PlayerId) => {
+    const userDocRef = doc(db, "users", winnerId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const userDoc = await transaction.get(userDocRef);
+            if (userDoc.exists()) {
+                const currentWins = userDoc.data().wins || 0;
+                transaction.update(userDocRef, { wins: currentWins + 1 });
+            }
+        });
+    } catch (error) {
+        console.error("Error updating leaderboard:", error);
+    }
+};
+
+export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
+    const usersCollection = collection(db, "users");
+    const q = query(usersCollection, orderBy("wins", "desc"), limit(10));
+    const querySnapshot = await getDocs(q);
+    const leaderboard: LeaderboardEntry[] = [];
+    querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        leaderboard.push({ name: data.name, wins: data.wins });
+    });
+    return leaderboard;
 };
 
 export const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePosition: PropertyId, diceRoll: number, gameState: GameState) => {
