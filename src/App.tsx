@@ -11,7 +11,8 @@ import {
 import type { DocumentData, Transaction } from "firebase/firestore";
 import Auth from './Auth';
 import Leaderboard from './Leaderboard';
-import Settings from './Settings'; // Import the new Settings component
+import Settings from './Settings';
+import AlertPopup from './AlertPopup';
 import { type User } from "firebase/auth";
 
 // Value imports from gameLogic
@@ -90,15 +91,16 @@ interface AdminSettingsWidgetProps {
     gameState: GameState;
     roomId: RoomId;
     currentPlayerId: PlayerId;
+    showAlert: (message: string) => void;
 }
 
-const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, currentPlayerId }) => {
+const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, currentPlayerId, showAlert }) => {
     const { settings } = gameState;
     const isHost = gameState.hostId === currentPlayerId;
 
     const handleSettingChange = async (setting: keyof GameState['settings'], value: boolean | number) => {
         if (gameState.status !== 'waiting' || !isHost) {
-            alert("Settings can only be changed by the host before the game starts.");
+            showAlert("Settings can only be changed by the host before the game starts.");
             return;
         }
 
@@ -118,12 +120,12 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, 
 
     const ToggleButton: FC<{label: string, settingKey: keyof GameState['settings'], currentValue: boolean}> = ({label, settingKey, currentValue}) => (
         <div className="flex justify-between items-center bg-gray-800 p-2 rounded">
-            <label htmlFor={String(settingKey)} className="text-sm text-gray-300">{label}</label>
+            <label htmlFor={String(settingKey)} className="text-xs text-gray-300">{label}</label>
             <button
                 id={String(settingKey)}
                 onClick={() => handleSettingChange(settingKey, !currentValue)}
                 disabled={!isHost || gameState.status !== 'waiting'}
-                className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${currentValue ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} disabled:bg-gray-500 disabled:cursor-not-allowed`}
+                className={`px-2 py-0.5 text-xs font-bold rounded-full transition-colors ${currentValue ? 'bg-green-500 text-white' : 'bg-red-500 text-white'} disabled:bg-gray-500 disabled:cursor-not-allowed`}
             >
                 {currentValue ? 'ON' : 'OFF'}
             </button>
@@ -131,17 +133,17 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, 
     );
 
     return (
-        <div className="bg-gray-700 p-2.5 rounded mb-4">
-            <h2 className="text-xl font-semibold mb-2 text-center">Game Settings</h2>
-            <div className="space-y-2">
+        <div className="bg-gray-700 p-2 rounded mb-3">
+            <h2 className="text-base font-semibold mb-2 text-center">Game Settings</h2>
+            <div className="space-y-1">
                 <div className="flex justify-between items-center bg-gray-800 p-2 rounded">
-                    <label htmlFor="initialMoney" className="text-sm text-gray-300">Initial Money</label>
+                    <label htmlFor="initialMoney" className="text-xs text-gray-300">Initial Money</label>
                     <select
                         id="initialMoney"
                         value={settings.initialMoney}
                         onChange={(e) => handleSettingChange('initialMoney', Number(e.target.value))}
                         disabled={!isHost || gameState.status !== 'waiting'}
-                        className="p-1 bg-gray-700 border border-gray-500 rounded text-white disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        className="p-1 bg-gray-700 border border-gray-500 rounded text-white text-xs disabled:bg-gray-600 disabled:cursor-not-allowed"
                     >
                         <option value="500">$500</option>
                         <option value="1500">$1500</option>
@@ -169,21 +171,31 @@ const AdminSettingsWidget: FC<AdminSettingsWidgetProps> = ({ gameState, roomId, 
 interface LobbyProps {
     currentPlayerId: PlayerId;
     user: User | null;
+    showAlert: (message: string) => void;
 }
 
-const Lobby: FC<LobbyProps> = ({ currentPlayerId, user }) => {
-    const [playerName, setPlayerName] = useState(user?.displayName || "");
+const Lobby: FC<LobbyProps> = ({ currentPlayerId, user, showAlert }) => {
+    const [playerName, setPlayerName] = useState("");
     const [joinRoomId, setJoinRoomId] = useState("");
     const maxPlayers = 8;
 
     useEffect(() => {
-        if (user) {
-            setPlayerName(user.displayName || "");
-        }
+        const fetchGameName = async () => {
+            if (user) {
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
+                if (userDoc.exists() && userDoc.data().gameName) {
+                    setPlayerName(userDoc.data().gameName);
+                } else {
+                    setPlayerName(user.displayName || "");
+                }
+            }
+        };
+        fetchGameName();
     }, [user]);
 
     const handleCreateGame = async () => {
-        if (!playerName) return alert("Please enter your name.");
+        if (!playerName) return showAlert("Please enter your name.");
         
         let newRoomId: RoomId;
         let gameRef;
@@ -247,12 +259,12 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId, user }) => {
             window.location.href = `/game/${newRoomId}`;
         } catch (error) {
             console.error("Failed to create game:", error);
-            alert("Could not create the game. Please check your connection and Firestore rules.");
+            showAlert("Could not create the game. Please check your connection and Firestore rules.");
         }
     };
 
     const handleJoinGame = async () => {
-        if (!playerName || !joinRoomId) return alert("Please enter name and room ID.");
+        if (!playerName || !joinRoomId) return showAlert("Please enter name and room ID.");
         const gameRef = doc(db, "games", joinRoomId.toUpperCase());
         try {
             await runTransaction(db, async (transaction: Transaction) => {
@@ -294,9 +306,9 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId, user }) => {
         } catch (error) {
             console.error(error);
             if (error instanceof Error) {
-                alert(error.message);
+                showAlert(error.message);
             } else {
-                alert("An unknown error occurred.");
+                showAlert("An unknown error occurred.");
             }
         }
     };
@@ -340,9 +352,10 @@ interface ModalProps {
     gameState: GameState;
     roomId: RoomId;
     currentPlayerId: PlayerId;
+    showAlert: (message: string) => void;
 }
 
-const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) => {
+const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId, showAlert }) => {
     const [timer, setTimer] = useState(10);
     const [bidAmount, setBidAmount] = useState<number>(0);
     const { auction } = gameState;
@@ -420,11 +433,11 @@ const AuctionModal: FC<ModalProps> = ({ gameState, roomId, currentPlayerId }) =>
     const placeBid = async () => {
         if (isSeller || hasBid) return;
         if (bidAmount <= (auction.currentBid || 0)) {
-            alert("Your bid must be higher than the current highest bid.");
+            showAlert("Your bid must be higher than the current highest bid.");
             return;
         }
         if (bidAmount > me.money) {
-            alert("You cannot bid more money than you have.");
+            showAlert("You cannot bid more money than you have.");
             return;
         }
         
@@ -515,9 +528,10 @@ interface TradeModalProps {
     gameState: GameState;
     roomId: RoomId;
     currentPlayerId: PlayerId;
+    showAlert: (message: string) => void;
 }
 
-function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeModal }: TradeModalProps) {
+function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeModal, showAlert }: TradeModalProps) {
     const isViewing = !!tradeId;
     const trade = isViewing ? gameState.trades[tradeId] : null;
 
@@ -534,7 +548,7 @@ function TradeModal({ gameState, roomId, currentPlayerId, tradeId, setShowTradeM
     };
 
     const handleSendOffer = async () => {
-        if (!tradePartnerId) return alert("Please select a player to trade with.");
+        if (!tradePartnerId) return showAlert("Please select a player to trade with.");
         const newTradeId = generateId();
         const newTrade: Trade = {
             id: newTradeId,
@@ -724,29 +738,29 @@ const TradesWidget: FC<TradesWidgetProps> = ({ gameState, currentPlayerId, onVie
     };
 
     return (
-        <div className="bg-gray-700 p-2.5 rounded mb-4">
-            <h2 className="text-xl font-semibold mb-2">Open Trades</h2>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+        <div className="bg-gray-700 p-2 rounded mb-3">
+            <h2 className="text-base font-semibold mb-2">Open Trades</h2>
+            <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
                 {pendingTrades.length > 0 ? pendingTrades.map(trade => {
                     const fromPlayer = gameState.players[trade.fromPlayer];
                     const toPlayer = gameState.players[trade.toPlayer];
                     return (
-                        <div key={trade.id} className="bg-gray-800 p-2 rounded-md border border-gray-600 text-sm">
+                        <div key={trade.id} className="bg-gray-800 p-2 rounded-md border border-gray-600 text-xs">
                             <p><strong>From:</strong> {fromPlayer.name}</p>
                             <p><strong>To:</strong> {toPlayer.name}</p>
                             {currentPlayerId === trade.toPlayer && (
-                                <button onClick={() => onViewTrade(trade.id)} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-xs">
+                                <button onClick={() => onViewTrade(trade.id)} className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-xs">
                                     View Offer
                                 </button>
                             )}
                              {currentPlayerId === trade.fromPlayer && (
-                                <button onClick={() => handleCancelTrade(trade.id)} className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">
+                                <button onClick={() => handleCancelTrade(trade.id)} className="w-full mt-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-xs">
                                     Cancel Offer
                                 </button>
                             )}
                         </div>
                     );
-                }) : <p className="text-gray-400">No open trades.</p>}
+                }) : <p className="text-xs text-gray-400">No open trades.</p>}
             </div>
         </div>
     );
@@ -832,6 +846,7 @@ interface BoardProps {
     gameState: GameState;
     currentPlayerId: PlayerId;
     roomId: RoomId;
+    showAlert: (message: string) => void;
 }
 interface CardPopupProps {
     card: Card;
@@ -858,7 +873,7 @@ const CardPopup: FC<CardPopupProps> = ({ card, onClose }) => {
     );
 };
 
-const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
+const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId, showAlert }) => {
     const { players } = gameState;
     const [activePopups, setActivePopups] = useState<Record<string, boolean>>({});
     const popupTimers = useRef<Record<string, NodeJS.Timeout>>({});
@@ -871,9 +886,12 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         setStartingBid(Math.floor(property.cost / 2));
     };
 
-    const confirmStartAuction = () => {
+    const confirmStartAuction = async () => {
         if (auctioningProperty) {
-            startAuction(roomId, auctioningProperty, startingBid, currentPlayerId);
+            const result = await startAuction(roomId, auctioningProperty, startingBid, currentPlayerId);
+            if (result) {
+                showAlert(result);
+            }
             setAuctioningProperty(null);
         }
     };
@@ -945,14 +963,14 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         let popupPositionClass = '';
         if (isLeftSide) {
             wrapperStyle.transform = 'rotate(90deg)';
-            wrapperStyle.width = '70px';
-            wrapperStyle.height = '120px';
+            wrapperStyle.width = '40px';
+            wrapperStyle.height = '80px';
             popupPositionClass = 'left-full top-0 ml-2';
         }
         if (isRightSide) {
             wrapperStyle.transform = 'rotate(-90deg)';
-            wrapperStyle.width = '70px';
-            wrapperStyle.height = '120px';
+            wrapperStyle.width = '40px';
+            wrapperStyle.height = '80px';
             popupPositionClass = 'right-full top-0 mr-2';
         }
         if (isTopSide) {
@@ -964,20 +982,20 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
         if (cellInfo.type === 'jail') {
             return (
-                <div key={i} className="bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center font-bold text-sm" style={getGridPosition(i)}>
+                <div key={i} className="bg-gray-700 border border-gray-500 relative flex justify-center items-center text-center font-bold" style={getGridPosition(i)}>
                     <div className="w-full h-full relative">
-                        <div className="absolute bottom-1 left-1 text-[10px] font-bold">Just Visiting</div>
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
+                        <div className="absolute bottom-1 left-1 text-[7px] font-bold">Just Visiting</div>
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-16 justify-center">
                             {Object.values(players).map(p => 
-                                p.animatedPosition === i && !p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.animatedPosition === i && !p.inJail && <div key={p.id} className="w-3.5 h-3.5 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
-                    <div className="absolute top-1 right-1 w-3/5 h-3/5 bg-red-800 bg-opacity-50 text-white flex justify-center items-center text-xs font-bold border border-red-500">
+                    <div className="absolute top-1 right-1 w-3/5 h-3/5 bg-red-800 bg-opacity-50 text-white flex justify-center items-center text-[10px] font-bold border border-red-500">
                         IN JAIL
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-16 justify-center">
                             {Object.values(players).map(p => 
-                                p.animatedPosition === i && p.inJail && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                                p.animatedPosition === i && p.inJail && <div key={p.id} className="w-3.5 h-3.5 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                             )}
                         </div>
                     </div>
@@ -987,14 +1005,14 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
         if (cellInfo.type === 'vacation') {
             return (
-                <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+                <div key={i} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-center box-border group ${isCorner ? 'font-bold' : ''}`} style={getGridPosition(i)}>
                     <div className="content-wrapper" style={wrapperStyle}>
-                        <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
-                        <div className="text-sm font-bold pb-1">${gameState.vacationPot || 0}</div>
+                        <div className="p-0.5 flex-grow flex items-center justify-center text-[9px]">{cellInfo.name}</div>
+                        <div className="text-[10px] font-bold pb-1">${gameState.vacationPot || 0}</div>
                     </div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-16 justify-center">
                         {Object.values(players).map(p =>
-                            p.animatedPosition === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                            p.animatedPosition === i && <div key={p.id} className="w-3.5 h-3.5 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                         )}
                     </div>
                 </div>
@@ -1002,48 +1020,48 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
         }
 
         return (
-            <div key={i} onClick={() => togglePopup(i)} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-xs text-center box-border group ${isCorner ? 'font-bold text-sm' : ''}`} style={getGridPosition(i)}>
+            <div key={i} onClick={() => togglePopup(i)} className={`bg-gray-700 border border-gray-500 relative flex justify-center items-center text-[8px] text-center box-border group ${isCorner ? 'font-bold' : ''}`} style={getGridPosition(i)}>
                 <div className="content-wrapper" style={wrapperStyle}>
-                    {hasColorBar && <div className="w-full h-8 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
+                    {hasColorBar && <div className="w-full h-4 border-b border-gray-500 overflow-hidden">{flagSvg}</div>}
                     <div className="p-0.5 flex-grow flex items-center justify-center">{cellInfo.name}</div>
                     
-                    {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-sm font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
+                    {!cellState?.owner && (cellInfo as UtilitySquare).cost && <div className="text-[9px] font-bold pb-1">${(cellInfo as UtilitySquare).cost}</div>}
                     
                     {ownerColor && (
-                        <div className="w-full h-8 border-t border-gray-500 flex justify-center items-center" style={{ backgroundColor: ownerColor }}>
-                            <span className="text-xs">{renderHouses(cellState.houses, cellState.hotels)}</span>
+                        <div className="w-full h-4 border-t border-gray-500 flex justify-center items-center" style={{ backgroundColor: ownerColor }}>
+                            <span className="text-[6px]">{renderHouses(cellState.houses, cellState.hotels)}</span>
                         </div>
                     )}
                 </div>
-                {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">$</div>}
-                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
+                {cellState?.mortgaged && <div className="absolute text-3xl text-red-500 text-opacity-70 font-bold">$</div>}
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-16 justify-center">
                     {Object.values(players).map(p => 
-                        p.animatedPosition === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
+                        p.animatedPosition === i && <div key={p.id} className="w-3.5 h-3.5 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
                     )}
                 </div>
                 {(cellInfo.type === 'city' || cellInfo.type === 'airport' || cellInfo.type === 'harbour' || cellInfo.type === 'company') && (
-                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[String(i)] ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 text-white text-sm w-72 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
-                        <button onClick={(e) => { e.stopPropagation(); togglePopup(i); }} className="absolute top-2 right-2 text-gray-400 hover:text-white bg-transparent border-none">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className={`absolute z-10 bg-purple-900 bg-opacity-95 ${activePopups[String(i)] ? 'flex' : 'hidden'} flex-col items-center justify-center p-2 text-white text-[10px] w-48 h-auto rounded-lg shadow-lg ${popupPositionClass}`}>
+                        <button onClick={(e) => { e.stopPropagation(); togglePopup(i); }} className="absolute top-1 right-1 text-gray-400 hover:text-white bg-transparent border-none">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
-                        <h4 className="font-bold mb-2 text-lg">{cellInfo.name}</h4>
-                        {owner && <p className="text-xs mb-2">Owned by: {owner.name}</p>}
+                        <h4 className="font-bold mb-1 text-xs">{cellInfo.name}</h4>
+                        {owner && <p className="text-[9px] mb-1">Owned by: {owner.name}</p>}
                         {cellInfo.type === 'city' && (
-                            <table className="w-full text-left text-base mb-2">
+                            <table className="w-full text-left text-[9px] mb-1">
                                 <tbody>
                                     <tr><td>Rent</td><td>${(cellInfo as CitySquare).rent[0]}</td></tr>
-                                    <tr><td>with 1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
-                                    <tr><td>with 2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
-                                    <tr><td>with 3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
-                                    <tr><td>with 4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
-                                    <tr><td>A Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
+                                    <tr><td>1 House</td><td>${(cellInfo as CitySquare).rent[1]}</td></tr>
+                                    <tr><td>2 Houses</td><td>${(cellInfo as CitySquare).rent[2]}</td></tr>
+                                    <tr><td>3 Houses</td><td>${(cellInfo as CitySquare).rent[3]}</td></tr>
+                                    <tr><td>4 Houses</td><td>${(cellInfo as CitySquare).rent[4]}</td></tr>
+                                    <tr><td>Hotel</td><td>${(cellInfo as CitySquare).rent[5]}</td></tr>
                                 </tbody>
                             </table>
                         )}
                          {cellInfo.type === 'airport' && (
-                             <table className="w-full text-left text-base mb-2">
+                             <table className="w-full text-left text-[9px] mb-1">
                                 <tbody>
                                     <tr><td>1 Owned</td><td>${(cellInfo as UtilitySquare).rent[0]}</td></tr>
                                     <tr><td>2 Owned</td><td>${(cellInfo as UtilitySquare).rent[1]}</td></tr>
@@ -1053,7 +1071,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                             </table>
                         )}
                         {cellInfo.type === 'harbour' && (
-                             <table className="w-full text-left text-base mb-2">
+                             <table className="w-full text-left text-[9px] mb-1">
                                 <tbody>
                                     <tr><td>1 Owned</td><td>$50</td></tr>
                                     <tr><td>2 Owned</td><td>$100</td></tr>
@@ -1064,35 +1082,47 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         )}
                         {cellInfo.type === 'company' && (
                             <>
-                                <p className="text-sm font-semibold">Rent with 1 owned: 4x Dice Roll</p>
-                                <p className="text-sm font-semibold">Rent with 2 owned: 10x Dice Roll</p>
+                                <p className="text-[10px] font-semibold">Rent with 1 owned: 4x Dice Roll</p>
+                                <p className="text-[10px] font-semibold">Rent with 2 owned: 10x Dice Roll</p>
                             </>
                         )}
                         {isMyProperty && (
                             <>
                                 <button 
-                                    onClick={() => cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState)} 
+                                    onClick={async () => {
+                                        const result = await (cellState.mortgaged ? unmortgageProperty(roomId, currentPlayerId, String(i), gameState) : mortgageProperty(roomId, currentPlayerId, String(i), gameState));
+                                        if (result) showAlert(result);
+                                    }} 
                                     disabled={!gameState.settings.allowMortgage}
-                                    className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                    className="w-full text-center py-1 bg-yellow-600 hover:bg-yellow-700 rounded mb-1 text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">
                                         {cellState.mortgaged ? `Unmortgage ($${Math.ceil(((cellInfo as UtilitySquare).cost / 2) * 1.1)})` : `Mortgage ($${(cellInfo as UtilitySquare).cost / 2})`}
                                 </button>
                                 {cellInfo.type === 'city' && !cellState.mortgaged && (
                                     <div className="flex w-full gap-1 mb-1">
-                                        <button onClick={() => buildHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">Build</button>
-                                        <button onClick={() => sellHouse(roomId, currentPlayerId, String(i), gameState)} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm">Sell</button>
+                                        <button onClick={async () => {
+                                            const result = await buildHouse(roomId, currentPlayerId, String(i), gameState);
+                                            if (result) showAlert(result);
+                                        }} className="flex-1 text-center py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs">Build</button>
+                                        <button onClick={async () => {
+                                            const result = await sellHouse(roomId, currentPlayerId, String(i), gameState);
+                                            if (result) showAlert(result);
+                                        }} className="flex-1 text-center py-1 bg-orange-600 hover:bg-orange-700 rounded text-xs">Sell</button>
                                     </div>
                                 )}
                                 {cellState && !cellState.mortgaged && cellState.houses === 0 && cellState.hotels === 0 && (
                                     <button 
-                                        onClick={() => sellProperty(roomId, currentPlayerId, String(i), gameState)} 
-                                        className="w-full text-center py-1 bg-red-600 hover:bg-red-700 rounded mb-1 text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                        onClick={async () => {
+                                            const result = await sellProperty(roomId, currentPlayerId, String(i), gameState);
+                                            if (result) showAlert(result);
+                                        }}
+                                        className="w-full text-center py-1 bg-red-600 hover:bg-red-700 rounded mb-1 text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">
                                         Sell Property
                                     </button>
                                 )}
                                 <button 
                                     onClick={() => handleStartAuction(String(i))} 
                                     disabled={!gameState.settings.allowOwnedPropertyAuctions}
-                                    className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-sm disabled:bg-gray-500 disabled:cursor-not-allowed">
+                                    className="w-full text-center py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">
                                     Auction
                                 </button>
                             </>
@@ -1104,8 +1134,8 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
     });
 
     return (
-        <div className="flex justify-center items-center p-5">
-            <div className="grid grid-cols-[120px_repeat(13,_70px)_120px] grid-rows-[120px_repeat(13,_70px)_120px] gap-0.5 bg-black border-2 border-gray-500 relative">
+        <div className="flex justify-center items-center p-2">
+            <div className="grid grid-cols-[80px_repeat(13,_40px)_80px] grid-rows-[80px_repeat(13,_40px)_80px] gap-0.5 bg-black border-2 border-gray-500 relative">
                 {cells}
                 {auctioningProperty && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50">
@@ -1130,7 +1160,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                     style={{ gridColumn: '2 / 15', gridRow: '2 / 15' }}
                 >
                     <div className="w-full h-full overflow-y-auto p-2.5 bg-green-900 bg-opacity-20 rounded text-gray-100">
-                       {gameState.gameLog.slice().reverse().map((msg: string, i: number) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-lg">{msg}</p>)}
+                       {gameState.gameLog.slice().reverse().map((msg: string, i: number) => <p key={i} className="m-0 mb-1.5 pb-1.5 border-b border-dotted border-gray-500 text-sm">{msg}</p>)}
                     </div>
                 </div>
             </div>
@@ -1166,9 +1196,10 @@ const DeleteConfirmModal: FC<DeleteConfirmModalProps> = ({ onConfirm, onCancel }
 interface GameRoomProps {
     roomId: RoomId;
     currentPlayerId: PlayerId;
+    showAlert: (message: string) => void;
 }
 
-const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
+const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId, showAlert }) => {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [activeTradeModal, setActiveTradeModal] = useState<string | null>(null);
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
@@ -1218,7 +1249,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     }, [hasRolled, roomId, currentPlayerId, lastDiceRoll]);
 
     const handleStartGame = async () => {
-        if (!gameState || gameState.hostId !== currentPlayerId) return alert("Only the admin can start the game.");
+        if (!gameState || gameState.hostId !== currentPlayerId) return showAlert("Only the admin can start the game.");
         
         const shuffledTurnOrder = [...gameState.turnOrder].sort(() => Math.random() - 0.5);
 
@@ -1231,7 +1262,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     };
 
     const handleRollDice = async () => {
-        if (!gameState || !me || gameState.currentPlayerTurn !== currentPlayerId) return alert("It's not your turn!");
+        if (!gameState || !me || gameState.currentPlayerTurn !== currentPlayerId) return showAlert("It's not your turn!");
         
         if (me.inJail) {
             const die1 = Math.floor(Math.random() * 6) + 1;
@@ -1262,7 +1293,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         }
 
         if (me.onVacation) {
-            alert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
+            showAlert("You are on vacation and must skip this turn. Click 'End Turn' to proceed.");
             return;
         }
     
@@ -1312,7 +1343,7 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
         const player = gameState.players[currentPlayerTurn];
         
         if (player.money < 0) {
-            alert("You must resolve your debt by selling houses or mortgaging properties before ending your turn.");
+            showAlert("You must resolve your debt by selling houses or mortgaging properties before ending your turn.");
             return;
         }
     
@@ -1395,88 +1426,100 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     const jailFine = gameState.settings.increasingJailFine ? 100 + ((gameState.jailCount?.[currentPlayerId] || 0) - 1) * 20 : 100;
 
     return (
-        <div className="max-w-[1500px] mx-auto">
-            <div className="flex flex-col lg:flex-row gap-5 items-start">
-                <Board gameState={gameState} currentPlayerId={currentPlayerId} roomId={roomId} />
-                <div className="flex-shrink-0 w-full lg:w-96 bg-gray-800 p-4 rounded-lg border border-gray-600 shadow-lg">
-                    <h1 className="text-2xl font-bold mb-2">Room: {roomId}</h1>
-                    <div className="bg-gray-700 p-2.5 rounded mb-4">
-                        <p><strong>Admin:</strong> {gameState.players[gameState.hostId]?.name || 'N/A'}</p>
-                        <p><strong>Vacation Pot:</strong> ${gameState.vacationPot || 0}</p>
+        <div className="max-w-5xl mx-auto">
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
+                <Board gameState={gameState} currentPlayerId={currentPlayerId} roomId={roomId} showAlert={showAlert} />
+                <div className="flex-shrink-0 w-full lg:w-64 bg-gray-800 p-3 rounded-lg border border-gray-600 shadow-lg">
+                    <h1 className="text-lg font-bold mb-2">Room: {roomId}</h1>
+                    <div className="bg-gray-700 p-2 rounded mb-3">
+                        <p className="text-xs"><strong>Admin:</strong> {gameState.players[gameState.hostId]?.name || 'N/A'}</p>
+                        <p className="text-xs"><strong>Vacation Pot:</strong> ${gameState.vacationPot || 0}</p>
                     </div>
 
                     {gameState.status === "waiting" && currentPlayerId === gameState.hostId && (
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Start Game</button>
-                            <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Delete Game</button>
+                        <div className="flex gap-2 mb-3">
+                            <button onClick={handleStartGame} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-3 rounded text-xs">Start Game</button>
+                            <button onClick={handleDeleteGame} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded text-xs">Delete Game</button>
                         </div>
                     )}
                     
-                    <AdminSettingsWidget gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />
+                    <AdminSettingsWidget gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} showAlert={showAlert} />
 
-                    <h2 className="text-xl font-semibold mb-2">Players</h2>
-                    <div className="space-y-2.5 mb-4">
+                    <h2 className="text-base font-semibold mb-2">Players</h2>
+                    <div className="space-y-2 mb-3">
                         {Object.values(gameState.players).map(p => (
-                            <div key={p.id} className={`flex items-center border border-gray-700 p-2.5 rounded-md transition-all duration-200 ${p.id === gameState.currentPlayerTurn ? 'border-l-4 border-green-500 shadow-lg bg-gray-700' : ''}`}>
-                                <div className="w-4 h-4 rounded-full mr-2.5" style={{backgroundColor: p.color}}></div>
+                            <div key={p.id} className={`flex items-center border border-gray-700 p-2 rounded-md transition-all duration-200 ${p.id === gameState.currentPlayerTurn ? 'border-l-4 border-green-500 shadow-lg bg-gray-700' : ''}`}>
+                                <div className="w-3.5 h-3.5 rounded-full mr-2" style={{backgroundColor: p.color}}></div>
                                 <div>
-                                    <strong>{p.name} {p.id === currentPlayerId ? '(You)' : ''}</strong>
-                                    <p className="text-sm">Money: ${p.money}</p>
-                                    {p.inJail && <p className="text-red-400 text-xs">In Jail (Turn {p.jailTurns})</p>}
+                                    <strong className="text-xs">{p.name} {p.id === currentPlayerId ? '(You)' : ''}</strong>
+                                    <p className="text-xs">Money: ${p.money}</p>
+                                    {p.inJail && <p className="text-red-400 text-[10px]">In Jail (Turn {p.jailTurns})</p>}
                                 </div>
                             </div>
                         ))}
                     </div>
                     
-                    <h2 className="text-xl font-semibold mb-2">Your Turn</h2>
+                    <h2 className="text-base font-semibold mb-2">Your Turn</h2>
                     {amIOnTurn && gameState.status === 'in-progress' && (
-                        <div className="grid grid-cols-2 gap-2 mb-4">
+                        <div className="grid grid-cols-2 gap-2 mb-3">
                             {!me.inJail && !hasRolled && !me.onVacation && (
-                                <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                <button onClick={handleRollDice} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded text-xs">
                                     {me.doublesCount > 0 ? "Roll Again" : "Roll Dice"}
                                 </button>
                             )}
                             {me.inJail && !hasRolled && (
                                 <>
-                                    <p className="col-span-2 text-center text-yellow-400">You are in Jail. Turn {me.jailTurns} of 3</p>
-                                    <button onClick={handleRollDice} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Roll for Doubles</button>
-                                    <button onClick={() => payJailFine(roomId, currentPlayerId, gameState)} disabled={me.money < jailFine} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Pay ${jailFine} Fine</button>
-                                    <button onClick={() => handleUsePardonCard(roomId, currentPlayerId, gameState)} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Use Get Out of Jail Free Card</button>
+                                    <p className="col-span-2 text-center text-yellow-400 text-xs">You are in Jail. Turn {me.jailTurns} of 3</p>
+                                    <button onClick={handleRollDice} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded text-xs">Roll for Doubles</button>
+                                    <button onClick={async() => {
+                                        const result = await payJailFine(roomId, currentPlayerId, gameState);
+                                        if(result) showAlert(result);
+                                    }} disabled={me.money < jailFine} className="bg-red-600 hover:bg-red-700 text-white font-bold py-1.5 px-3 rounded text-xs">Pay ${jailFine} Fine</button>
+                                    <button onClick={async () => {
+                                        const result = await handleUsePardonCard(roomId, currentPlayerId, gameState);
+                                        if (result) showAlert(result);
+                                    }} disabled={me.getOutOfJailFreeCards === 0} className="col-span-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">Use Get Out of Jail Free Card</button>
                                 </>
                             )}
-                            {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center">You rolled doubles! Roll again.</p>}
+                            {me.doublesCount > 0 && !hasRolled && <p className="text-green-400 col-span-2 text-center text-xs">You rolled doubles! Roll again.</p>}
 
                             {hasRolled && !me.onVacation && !me.inJail && (
                                 <>
-                                    {canBuy && <button onClick={() => buyProperty(roomId, currentPlayerId, me.position, gameState)} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded">Buy ({currentSquareInfo?.name})</button>}
-                                    {canBuy && <button onClick={() => startAuction(roomId, String(me.position), Math.floor((initialBoardState[String(me.position)] as UtilitySquare).cost / 2))} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded">Auction</button>}
+                                    {canBuy && <button onClick={async () => {
+                                        const result = await buyProperty(roomId, currentPlayerId, me.position, gameState);
+                                        if(result) showAlert(result);
+                                    }} className="bg-green-500 hover:bg-green-600 text-white font-bold py-1.5 px-3 rounded text-xs">Buy</button>}
+                                    {canBuy && <button onClick={async () => {
+                                        const result = await startAuction(roomId, String(me.position), Math.floor((initialBoardState[String(me.position)] as UtilitySquare).cost / 2));
+                                        if (result) showAlert(result);
+                                    }} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1.5 px-3 rounded text-xs">Auction</button>}
                                     
                                     {me.doublesCount === 0 ? (
-                                        <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
+                                        <button onClick={handleEndTurn} disabled={me.money < 0} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-700 disabled:cursor-not-allowed">End Turn</button>
                                     ) : (
-                                        <button onClick={() => setHasRolled(false)} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Continue</button>
+                                        <button onClick={() => setHasRolled(false)} className="col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded text-xs">Continue</button>
                                     )}
                                 </>
                             )}
                             
                             {me.onVacation && (
-                                <button onClick={handleEndTurn} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">End Turn</button>
+                                <button onClick={handleEndTurn} className="col-span-2 bg-gray-500 hover:bg-gray-600 text-white font-bold py-1.5 px-3 rounded text-xs">End Turn</button>
                             )}
                         </div>
                     )}
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Declare Bankruptcy</button>
-                        <button onClick={() => setActiveTradeModal('new')} disabled={gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
-                        <button onClick={() => setShowStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Property Stats</button>
-                        <button onClick={() => setShowVisitStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed">Visit Stats</button>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                        <button onClick={() => handleBankruptcy(roomId, currentPlayerId, gameState)} disabled={gameState.status !== 'in-progress'} className="bg-red-700 hover:bg-red-800 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">Bankruptcy</button>
+                        <button onClick={() => setActiveTradeModal('new')} disabled={gameState.status !== 'in-progress'} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">Propose Trade</button>
+                        <button onClick={() => setShowStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-teal-600 hover:bg-teal-700 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">Property Stats</button>
+                        <button onClick={() => setShowVisitStatsModal(true)} disabled={gameState.status !== 'in-progress'} className="col-span-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-1.5 px-3 rounded text-xs disabled:bg-gray-500 disabled:cursor-not-allowed">Visit Stats</button>
                     </div>
 
                     {gameState.status === 'in-progress' && <TradesWidget gameState={gameState} currentPlayerId={currentPlayerId} onViewTrade={(tradeId) => setActiveTradeModal(tradeId)} />}
                     
                 </div>
             </div>
-            {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} />}
-            {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} />}
+            {activeTradeModal && <TradeModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} setShowTradeModal={setActiveTradeModal} tradeId={activeTradeModal === 'new' ? undefined : activeTradeModal} showAlert={showAlert} />}
+            {gameState.auction?.active && <AuctionModal gameState={gameState} roomId={roomId} currentPlayerId={currentPlayerId} showAlert={showAlert} />}
             {showDeleteConfirmModal && <DeleteConfirmModal onConfirm={confirmDeleteGame} onCancel={() => setShowDeleteConfirmModal(false)} />}
             {showStatsModal && <StatsModal gameState={gameState} onClose={() => setShowStatsModal(false)} />}
             {showVisitStatsModal && <VisitStatsModal gameState={gameState} onClose={() => setShowVisitStatsModal(false)} />}
@@ -1493,7 +1536,11 @@ const GameRoom: FC<GameRoomProps> = ({ roomId, currentPlayerId }) => {
     );
 };
 
-const AdminDashboard: FC = () => {
+interface AdminDashboardProps {
+    showAlert: (message: string) => void;
+}
+
+const AdminDashboard: FC<AdminDashboardProps> = ({ showAlert }) => {
     const [games, setGames] = useState<GameState[]>([]);
     const [password, setPassword] = useState("");
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1502,7 +1549,7 @@ const AdminDashboard: FC = () => {
         if (password === "admin123") {
             setIsAuthenticated(true);
         } else {
-            alert("Incorrect password.");
+            showAlert("Incorrect password.");
         }
     };
 
@@ -1514,9 +1561,9 @@ const AdminDashboard: FC = () => {
             setGames(gamesList);
         } catch (error) {
             console.error("Error fetching games:", error);
-            alert("Could not fetch games. Check Firestore connection and rules.");
+            showAlert("Could not fetch games. Check Firestore connection and rules.");
         }
-    }, []);
+    }, [showAlert]);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -1534,11 +1581,11 @@ const AdminDashboard: FC = () => {
                     batch.delete(doc.ref);
                 });
                 await batch.commit();
-                alert("All games have been wiped out.");
+                showAlert("All games have been wiped out.");
                 fetchGames();
             } catch (error) {
                 console.error("Error wiping games:", error);
-                alert("Failed to wipe games.");
+                showAlert("Failed to wipe games.");
             }
         }
     };
@@ -1604,6 +1651,11 @@ const App: FC = () => {
     const [roomId, setRoomId] = useState<RoomId | null>(null);
     const [playerId, setPlayerId] = useState<PlayerId>(() => localStorage.getItem("monopolyPlayerId") || `p_${Date.now()}`);
     const [user, setUser] = useState<User | null>(null);
+    const [alertInfo, setAlertInfo] = useState<{ message: string; isVisible: boolean }>({ message: '', isVisible: false });
+
+    const showAlert = (message: string) => {
+        setAlertInfo({ message, isVisible: true });
+    };
 
     useEffect(() => {
         const storedPlayerId = localStorage.getItem("monopolyPlayerId");
@@ -1641,24 +1693,25 @@ const App: FC = () => {
 
     const renderPage = () => {
         if (page === 'settings' && user) {
-            return <Settings user={user} onLogout={handleLogout} onBack={() => setPage('lobby')} />;
+            return <Settings user={user} onLogout={handleLogout} onBack={() => setPage('lobby')} showAlert={showAlert} />;
         }
 
         switch (page) {
             case 'game':
-                return roomId ? <GameRoom roomId={roomId} currentPlayerId={playerId} /> : <div>Invalid Game Room</div>;
+                return roomId ? <GameRoom roomId={roomId} currentPlayerId={playerId} showAlert={showAlert} /> : <div>Invalid Game Room</div>;
             case 'admin':
-                return <AdminDashboard />;
+                return <AdminDashboard showAlert={showAlert} />;
             default:
-                return <Lobby currentPlayerId={playerId} user={user} />;
+                return <Lobby currentPlayerId={playerId} user={user} showAlert={showAlert} />;
         }
     };
 
     return (
         <div className="bg-gray-900 text-gray-200 min-h-screen p-5 font-sans">
+             {alertInfo.isVisible && <AlertPopup message={alertInfo.message} onClose={() => setAlertInfo({ message: '', isVisible: false })} />}
             <div className="relative">
-               <Auth onLogin={handleLogin} onLogout={handleLogout} onSettingsClick={() => setPage('settings')} />
-               <Leaderboard />
+               {page !== 'game' && <Auth onLogin={handleLogin} onLogout={handleLogout} onSettingsClick={() => setPage('settings')} />}
+               {page !== 'game' && <Leaderboard />}
             </div>
             {renderPage()}
         </div>

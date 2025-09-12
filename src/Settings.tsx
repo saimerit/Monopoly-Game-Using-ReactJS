@@ -1,30 +1,42 @@
 // src/Settings.tsx
 
 import React, { useState, useEffect } from 'react';
-import { getAuth, updateProfile, signOut, type User } from "firebase/auth";
+import { getAuth, signOut, type User } from "firebase/auth";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { db } from './firebase';
 
 interface SettingsProps {
     user: User;
     onLogout: () => void;
     onBack: () => void;
+    showAlert: (message: string) => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack }) => {
-    const [displayName, setDisplayName] = useState(user.displayName || "");
+const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack, showAlert }) => {
+    const [gameName, setGameName] = useState("");
     const auth = getAuth();
 
     useEffect(() => {
-        setDisplayName(user.displayName || "");
+        const fetchGameName = async () => {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists() && userDoc.data().gameName) {
+                setGameName(userDoc.data().gameName);
+            } else {
+                setGameName(user.displayName || "");
+            }
+        };
+        fetchGameName();
     }, [user]);
 
     const handleNameChange = async () => {
         if (auth.currentUser) {
             try {
-                await updateProfile(auth.currentUser, { displayName });
-                alert("Display name updated successfully!");
+                await setDoc(doc(db, "users", auth.currentUser.uid), { gameName }, { merge: true });
+                showAlert("In-game name updated successfully!");
             } catch (error) {
-                console.error("Error updating display name:", error);
-                alert("Failed to update display name.");
+                console.error("Error updating in-game name:", error);
+                showAlert("Failed to update in-game name.");
             }
         }
     };
@@ -33,7 +45,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack }) => {
         try {
             await signOut(auth);
             onLogout();
-        } catch (error){
+        } catch (error) {
             console.error("Error signing out:", error);
         }
     };
@@ -43,16 +55,16 @@ const Settings: React.FC<SettingsProps> = ({ user, onLogout, onBack }) => {
             <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-lg">
                 <h2 className="text-2xl font-semibold mb-4">Settings</h2>
                 <div className="mb-4">
-                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-300 mb-2">Display Name</label>
+                    <label htmlFor="gameName" className="block text-sm font-medium text-gray-300 mb-2">In-Game Name</label>
                     <input
                         type="text"
-                        id="displayName"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
+                        id="gameName"
+                        value={gameName}
+                        onChange={(e) => setGameName(e.target.value)}
                         className="w-full p-2 bg-gray-700 border border-gray-500 rounded text-white"
                     />
                     <button onClick={handleNameChange} className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                        Save Name
+                        Save In-Game Name
                     </button>
                 </div>
                 <div className="mb-4">

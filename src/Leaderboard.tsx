@@ -1,7 +1,7 @@
 // src/Leaderboard.tsx
 
 import React, { useState, useEffect } from 'react';
-import { getLeaderboard, type LeaderboardEntry } from './gameLogic';
+import { getLeaderboard,type LeaderboardEntry } from './gameLogic';
 
 const Leaderboard: React.FC = () => {
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -23,16 +23,32 @@ const Leaderboard: React.FC = () => {
                 Leaderboard
             </button>
             {showLeaderboard && (
-                <div className="absolute top-12 left-0 bg-gray-800 p-4 rounded-lg border border-gray-600 shadow-lg w-64">
+                <div className="absolute top-12 left-0 bg-gray-800 p-4 rounded-lg border border-gray-600 shadow-lg w-auto">
                     <h2 className="text-xl font-bold mb-2">Leaderboard</h2>
-                    <ol className="list-decimal list-inside">
-                        {leaderboard.map((player, index) => (
-                            <li key={index} className="flex justify-between">
-                                <span>{player.name}</span>
-                                <span>{player.wins}</span>
-                            </li>
-                        ))}
-                    </ol>
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr>
+                                <th className="p-2">Name</th>
+                                <th className="p-2">Wins</th>
+                                <th className="p-2">Losses</th>
+                                <th className="p-2">Win Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {leaderboard.map((player, index) => {
+                                const totalGames = player.wins + player.losses;
+                                const winRate = totalGames > 0 ? ((player.wins / totalGames) * 100).toFixed(2) + '%' : 'N/A';
+                                return (
+                                    <tr key={index} className="border-b border-gray-700">
+                                        <td className="p-2">{player.name}</td>
+                                        <td className="p-2">{player.wins}</td>
+                                        <td className="p-2">{player.losses}</td>
+                                        <td className="p-2">{winRate}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

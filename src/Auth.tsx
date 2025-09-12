@@ -33,7 +33,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onLogout, onSettingsClick }) => {
                     await setDoc(doc(db, "users", currentUser.uid), {
                         name: currentUser.displayName || 'Anonymous',
                         email: currentUser.email,
-                        wins: 0
+                        wins: 0,
+                        losses: 0
                     });
                 }
             } else {

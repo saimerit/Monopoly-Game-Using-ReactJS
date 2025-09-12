@@ -134,6 +134,7 @@ export type BoardSquare = BaseSquare | CitySquare | UtilitySquare | TaxSquare;
 export interface LeaderboardEntry {
     name: string;
     wins: number;
+    losses: number;
 }
 
 // ==========================================================
@@ -558,6 +559,11 @@ export const handleBankruptcy = async (roomId: RoomId, playerId: PlayerId, gameS
     const player = gameState.players[playerId];
     const gameRef = doc(db, "games", roomId);
 
+    if (!playerId.startsWith('p_')) {
+        const userDocRef = doc(db, "users", playerId);
+        await updateDoc(userDocRef, { losses: increment(1) });
+    }
+
     const playerIds = Object.keys(gameState.players);
     if (playerIds.length === 1 && playerIds[0] === playerId) {
         await updateDoc(gameRef, {
@@ -618,7 +624,7 @@ export const getLeaderboard = async (): Promise<LeaderboardEntry[]> => {
     const leaderboard: LeaderboardEntry[] = [];
     querySnapshot.forEach((doc) => {
         const data = doc.data();
-        leaderboard.push({ name: data.name, wins: data.wins });
+        leaderboard.push({ name: data.name, wins: data.wins, losses: data.losses || 0 });
     });
     return leaderboard;
 };
@@ -684,19 +690,17 @@ export const handlePayment = async (roomId: RoomId, renterId: PlayerId, squarePo
     });
 };
 
-export const startAuction = async (roomId: RoomId, propertyId: PropertyId, startingBid: number, sellerId: PlayerId | null = null) => {
+export const startAuction = async (roomId: RoomId, propertyId: PropertyId, startingBid: number, sellerId: PlayerId | null = null): Promise<string | void> => {
     const gameDoc = await getDoc(doc(db, "games", roomId));
-    if (!gameDoc.exists()) return;
+    if (!gameDoc.exists()) return "Game not found.";
     const gameState = gameDoc.data() as GameState;
 
     if (sellerId && (!gameState.settings.allowOwnedPropertyAuctions || gameState.currentPlayerTurn !== sellerId)) {
-        alert("Auctioning owned properties is disabled or it is not your turn.");
-        return;
+        return "Auctioning owned properties is disabled or it is not your turn.";
     }
 
     if (!sellerId && !gameState.settings.allowAuctions) {
-        alert("Auctions for unowned properties are disabled for this game.");
-        return;
+        return "Auctions for unowned properties are disabled for this game.";
     }
     
     await updateDoc(doc(db, "games", roomId), {
@@ -800,7 +804,7 @@ export const goToJail = async (roomId: RoomId, playerId: PlayerId, gameState: Ga
     });
 };
 
-export const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
+export const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState: GameState): Promise<string | void> => {
     const gameRef = doc(db, "games", roomId);
     const player = gameState.players[playerId];
     let fine = 100;
@@ -808,8 +812,7 @@ export const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState:
         fine = fine + ((gameState.jailCount?.[playerId] || 0) - 1) * 20;
     }
     if (player.money < fine) {
-        alert("You do not have enough money to pay the fine.");
-        return;
+        return "You do not have enough money to pay the fine.";
     }
 
     await updateDoc(gameRef, {
@@ -819,13 +822,12 @@ export const payJailFine = async (roomId: RoomId, playerId: PlayerId, gameState:
     });
 };
 
-export const handleUsePardonCard = async (roomId: RoomId, playerId: PlayerId, gameState: GameState) => {
+export const handleUsePardonCard = async (roomId: RoomId, playerId: PlayerId, gameState: GameState): Promise<string | void> => {
     const gameRef = doc(db, "games", roomId);
     const player = gameState.players[playerId];
 
     if (player.getOutOfJailFreeCards <= 0) {
-        alert("You do not have a Get Out of Jail Free card.");
-        return;
+        return "You do not have a Get Out of Jail Free card.";
     }
 
     await updateDoc(gameRef, {
@@ -835,12 +837,11 @@ export const handleUsePardonCard = async (roomId: RoomId, playerId: PlayerId, ga
     });
 };
 
-export const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition: number, gameState: GameState) => {
+export const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPosition: number, gameState: GameState): Promise<string | void> => {
     const player = gameState.players[playerId];
     const property = initialBoardState[String(propertyPosition)] as CitySquare | UtilitySquare;
     if (player.money < property.cost) {
-        alert("Not enough money!");
-        return;
+        return "Not enough money!";
     }
 
     const propertyTypeMap: Record<string, keyof Player> = { 'city': 'cities', 'airport': 'airports', 'harbour': 'harbours', 'company': 'companies' };
@@ -855,17 +856,15 @@ export const buyProperty = async (roomId: RoomId, playerId: PlayerId, propertyPo
     });
 };
 
-export const sellProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+export const sellProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState): Promise<string | void> => {
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const propertyState = gameState.board[propertyId];
 
     if (propertyState.houses > 0 || propertyState.hotels > 0) {
-        alert("You must sell all houses and hotels before selling the property.");
-        return;
+        return "You must sell all houses and hotels before selling the property.";
     }
     if (propertyState.mortgaged) {
-        alert("You must unmortgage the property before selling it.");
-        return;
+        return "You must unmortgage the property before selling it.";
     }
     if (propertyState.owner !== playerId) return;
 
@@ -889,21 +888,18 @@ export const sellProperty = async (roomId: RoomId, playerId: PlayerId, propertyI
     await updateDoc(doc(db, "games", roomId), updates);
 };
 
-export const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+export const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState): Promise<string | void> => {
     if (!gameState.settings.allowMortgage) {
-        alert("Mortgaging is disabled for this game.");
-        return;
+        return "Mortgaging is disabled for this game.";
     }
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const propertyState = gameState.board[propertyId];
 
     if (propertyState.houses > 0 || propertyState.hotels > 0) {
-        alert("You must sell all houses and hotels before mortgaging.");
-        return;
+        return "You must sell all houses and hotels before mortgaging.";
     }
     if (propertyState.owner !== playerId) {
-        alert("You can only mortgage your own properties.");
-        return;
+        return "You can only mortgage your own properties.";
     }
     if (propertyState.mortgaged) return; // Already mortgaged
 
@@ -915,22 +911,19 @@ export const mortgageProperty = async (roomId: RoomId, playerId: PlayerId, prope
     });
 };
 
-export const unmortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState) => {
+export const unmortgageProperty = async (roomId: RoomId, playerId: PlayerId, propertyId: PropertyId, gameState: GameState): Promise<string | void> => {
     if (!gameState.settings.allowMortgage) {
-        alert("Mortgaging is disabled for this game.");
-        return;
+        return "Mortgaging is disabled for this game.";
     }
     const propertyInfo = initialBoardState[propertyId] as CitySquare | UtilitySquare;
     const player = gameState.players[playerId];
     const unmortgageCost = (propertyInfo.cost / 2) * 1.1;
 
     if (player.money < unmortgageCost) {
-        alert(`You need $${Math.ceil(unmortgageCost)} to unmortgage.`);
-        return;
+        return `You need $${Math.ceil(unmortgageCost)} to unmortgage.`;
     }
     if (gameState.board[propertyId].owner !== playerId) {
-        alert("You can only unmortgage your own properties.");
-        return;
+        return "You can only unmortgage your own properties.";
     }
 
     await updateDoc(doc(db, "games", roomId), {
@@ -940,7 +933,7 @@ export const unmortgageProperty = async (roomId: RoomId, playerId: PlayerId, pro
     });
 };
 
-export const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId, gameState: GameState) => {
+export const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId, gameState: GameState): Promise<string | void> => {
     const player = gameState.players[playerId];
     const cityInfo = initialBoardState[cityId] as CitySquare;
     const countryInfo = countryData[cityInfo.country];
@@ -948,12 +941,10 @@ export const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: Pro
 
     const hasMonopoly = countryInfo.cities.every(cId => player.cities.includes(String(cId)));
     if (!hasMonopoly) {
-        alert("You need to own all cities in a country to build houses.");
-        return;
+        return "You need to own all cities in a country to build houses.";
     }
     if (player.money < countryInfo.houseCost) {
-        alert(`You need $${countryInfo.houseCost} to build a house.`);
-        return;
+        return `You need $${countryInfo.houseCost} to build a house.`;
     }
     if (cityState.houses >= 4 && cityState.hotels === 0) {
         // Build a hotel
@@ -974,12 +965,11 @@ export const buildHouse = async (roomId: RoomId, playerId: PlayerId, cityId: Pro
             gameLog: arrayUnion(`${player.name} built a house in ${cityInfo.name}.`)
         });
     } else {
-        alert("You cannot build any more on this property.");
-        return;
+        return "You cannot build any more on this property.";
     }
 };
 
-export const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId, gameState: GameState) => {
+export const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: PropertyId, gameState: GameState): Promise<string | void> => {
     const cityInfo = initialBoardState[cityId] as CitySquare;
     const countryInfo = countryData[cityInfo.country];
     const cityState = gameState.board[cityId];
@@ -1005,7 +995,6 @@ export const sellHouse = async (roomId: RoomId, playerId: PlayerId, cityId: Prop
             gameLog: arrayUnion(`${gameState.players[playerId].name} sold a house in ${cityInfo.name} for $${salePrice}.`)
         });
     } else {
-        alert("There are no houses or hotels to sell on this property.");
-        return;
+        return "There are no houses or hotels to sell on this property.";
     }
 };
