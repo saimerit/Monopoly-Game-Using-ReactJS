@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { FC } from 'react';
 import { db } from './firebase';
@@ -9,6 +11,7 @@ import {
 import type { DocumentData, Transaction } from "firebase/firestore";
 import Auth from './Auth';
 import Leaderboard from './Leaderboard';
+import Settings from './Settings'; // Import the new Settings component
 import { type User } from "firebase/auth";
 
 // Value imports from gameLogic
@@ -300,7 +303,7 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId, user }) => {
 
     return (
         <div className="max-w-7xl mx-auto">
-            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 訣</h1>
+            <h1 className="text-5xl font-bold text-center mb-8">World Monopoly 🌍</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Actions */}
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -906,10 +909,10 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
 
     const renderHouses = (houses: number, hotels: number) => {
         if (hotels > 0) {
-            return '妾';
+            return '🏨';
         }
         if (houses > 0) {
-            return '匠'.repeat(houses);
+            return '🏠'.repeat(houses);
         }
         return null;
     };
@@ -1012,7 +1015,7 @@ const Board: FC<BoardProps> = ({ gameState, currentPlayerId, roomId }) => {
                         </div>
                     )}
                 </div>
-                {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">調</div>}
+                {cellState?.mortgaged && <div className="absolute text-5xl text-red-500 text-opacity-70 font-bold">$</div>}
                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-wrap gap-1 w-20 justify-center">
                     {Object.values(players).map(p => 
                         p.animatedPosition === i && <div key={p.id} className="w-6 h-6 rounded-full border border-white shadow-md" style={{ backgroundColor: p.color }}></div>
@@ -1621,6 +1624,7 @@ const App: FC = () => {
         const newPlayerId = `p_${Date.now()}`;
         setPlayerId(newPlayerId);
         localStorage.setItem("monopolyPlayerId", newPlayerId);
+        setPage('lobby'); // Go back to lobby on logout
     };
 
     useEffect(() => {
@@ -1630,10 +1634,16 @@ const App: FC = () => {
             setPage('game');
         } else if (path === '/admin') {
             setPage('admin');
+        } else if (path === '/settings') {
+            setPage('settings');
         }
     }, []);
 
     const renderPage = () => {
+        if (page === 'settings' && user) {
+            return <Settings user={user} onLogout={handleLogout} onBack={() => setPage('lobby')} />;
+        }
+
         switch (page) {
             case 'game':
                 return roomId ? <GameRoom roomId={roomId} currentPlayerId={playerId} /> : <div>Invalid Game Room</div>;
@@ -1647,7 +1657,7 @@ const App: FC = () => {
     return (
         <div className="bg-gray-900 text-gray-200 min-h-screen p-5 font-sans">
             <div className="relative">
-               <Auth onLogin={handleLogin} onLogout={handleLogout} />
+               <Auth onLogin={handleLogin} onLogout={handleLogout} onSettingsClick={() => setPage('settings')} />
                <Leaderboard />
             </div>
             {renderPage()}

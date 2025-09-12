@@ -1,3 +1,5 @@
+// src/gameLogic.tsx
+
 import { db } from './firebase';
 import {
     doc, updateDoc, arrayUnion, deleteField,
@@ -286,7 +288,7 @@ export const surpriseCards: Omit<Card, 'action'>[] = [
     { id: 'S16', type: 'surprise', text: 'Street beautification assessment: Pay $30 for each house you own.' },
     { id: 'S17', type: 'surprise', text: 'Have a vacation and a trip to New York! Advance to the Vacation space, collect the vacation pot, and then immediately move to New York. If you pass Go, collect $200.' },
     { id: 'S18', type: 'surprise', text: 'Lost your luggage! Pay $100 to the vacation pot.' },
-    { id: 'S19', type: 'surprise', text: "Won a free vacation! Go to the vacation space. Do NOT collect the vacation pot. Your turn ends." },
+    { id: 'S19', type: "surprise", text: "Won a free vacation! Go to the vacation space. Do NOT collect the vacation pot. Your turn ends." },
     { id: 'S20', type: 'surprise', text: 'Business trip to Tokyo! Advance to Tokyo. If you pass Go, collect $200.' },
 ];
 // ==========================================================
