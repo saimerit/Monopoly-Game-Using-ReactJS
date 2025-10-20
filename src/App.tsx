@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { FC } from 'react';
-import { db } from './firebase';
+import { db } from './Mfirebase';
 import {
     doc, setDoc, updateDoc, onSnapshot, arrayUnion, deleteField,
     runTransaction, collection, getDocs, increment, getDoc, deleteDoc,
@@ -187,8 +187,10 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId, user, showAlert }) => {
                 if (userDoc.exists() && userDoc.data().gameName) {
                     setPlayerName(userDoc.data().gameName);
                 } else {
-                    setPlayerName(user.displayName || "");
+                    setPlayerName(user.displayName || "Anonymous");
                 }
+            } else {
+                setPlayerName("Anonymous");
             }
         };
         fetchGameName();
@@ -197,16 +199,9 @@ const Lobby: FC<LobbyProps> = ({ currentPlayerId, user, showAlert }) => {
     const handleCreateGame = async () => {
         if (!playerName) return showAlert("Please enter your name.");
         
-        let newRoomId: RoomId;
-        let gameRef;
-        let docSnap;
+        const newRoomId = generateRoomId();
+        const gameRef = doc(db, "games", newRoomId);
         const initialMoney = 1500; // Default value
-
-        do {
-            newRoomId = generateRoomId();
-            gameRef = doc(db, "games", newRoomId);
-            docSnap = await getDoc(gameRef);
-        } while (docSnap.exists());
 
         const newGame: GameState = {
             gameId: newRoomId,

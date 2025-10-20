@@ -1,7 +1,7 @@
 // src/Auth.tsx
 
 import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
+import { db } from './Mfirebase';
 import {
     getAuth,
     signInWithPopup,

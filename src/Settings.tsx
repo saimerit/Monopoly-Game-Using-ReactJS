@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getAuth, signOut, type User } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { db } from './firebase';
+import { db } from './Mfirebase';
 
 interface SettingsProps {
     user: User;

@@ -1,6 +1,6 @@
 // src/gameLogic.tsx
 
-import { db } from './firebase';
+import { db } from './Mfirebase';
 import {
     doc, updateDoc, arrayUnion, deleteField,
     increment, getDoc,
