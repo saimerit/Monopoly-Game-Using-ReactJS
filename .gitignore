@@ -25,4 +25,4 @@ dist-ssr
 
 
 #API - key
-src/firebase.ts
+src/Mfirebase.ts
